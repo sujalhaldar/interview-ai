@@ -1,0 +1,24 @@
+# Environment and secrets
+/.env
+/.env.*
+!/.env.example
+!/.env.*.example
+
+# Dependencies and generated output
+/node_modules/
+/dist/
+/coverage/
+
+# Logs and temporary files
+/logs/
+*.log
+*.tmp
+*.temp
+
+# Private keys and certificate stores
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
