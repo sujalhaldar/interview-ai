@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test/pdf-authorization.test.js",
     "dev": "npx nodemon server.js"
   },
   "keywords": [],
@@ -24,5 +24,8 @@
     "puppeteer": "^24.37.5",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.25.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.2"
   }
 }
