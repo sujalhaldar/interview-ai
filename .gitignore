@@ -1,0 +1,63 @@
+# Environment and secrets (all directories)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+dist-ssr/
+build/
+coverage/
+.cache/
+.vite/
+
+# Logs and runtime files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.pid
+*.seed
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Private keys and certificate stores
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Local IDE and OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.user
+*.userosscache
+*.sln.docstates
+
+# Local planning and tool output
+.agents/
+.codex/
+graphify-out/
