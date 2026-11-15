@@ -3,6 +3,7 @@ const assert = require("node:assert/strict")
 const mongoose = require("mongoose")
 const { MongoMemoryServer } = require("mongodb-memory-server")
 const interviewReportModel = require("../src/models/interviewReport.model")
+const analysisIdempotencyModel = require("../src/models/analysis-idempotency.model")
 
 let mongoServer
 let ownerId
@@ -24,6 +25,18 @@ test.after(async () => {
 
 test.beforeEach(async () => {
     await interviewReportModel.deleteMany({})
+    await analysisIdempotencyModel.deleteMany({})
+})
+
+test("enforces user-scoped idempotency uniqueness and permits failed retries", async () => {
+    const expiresAt = new Date(Date.now() + 60_000)
+    await analysisIdempotencyModel.create({ user: ownerId, key: "same-key", status: "processing", expiresAt })
+    await assert.rejects(() => analysisIdempotencyModel.create({ user: ownerId, key: "same-key", status: "processing", expiresAt }), error => error.code === 11000)
+    const other = await analysisIdempotencyModel.create({ user: otherUserId, key: "same-key", status: "processing", expiresAt })
+    assert.equal(other.key, "same-key")
+    await analysisIdempotencyModel.updateOne({ user: ownerId, key: "same-key" }, { $set: { status: "failed" } })
+    await analysisIdempotencyModel.deleteOne({ user: ownerId, key: "same-key" })
+    assert.equal((await analysisIdempotencyModel.create({ user: ownerId, key: "same-key", status: "processing", expiresAt })).status, "processing")
 })
 
 test("persists and retrieves a V2 report with nested evidence", async () => {

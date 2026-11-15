@@ -7,6 +7,7 @@ const { assembleResumeAnalysisReport } = require("../services/resume-analysis-sc
 const { mapResumeAnalysisReport } = require("../services/resume-analysis-report-mapper.service")
 const dictionary = require("../services/jd-requirements.dictionary")
 const interviewReportModel = require("../models/interviewReport.model")
+const analysisIdempotencyModel = require("../models/analysis-idempotency.model")
 
 
 
@@ -18,21 +19,67 @@ async function generateInterViewReportController(req, res) {
     const { selfDescription, jobDescription } = req.body
     if (typeof jobDescription !== "string" || !jobDescription.trim()) return res.status(400).json({ message: "Job description is required." })
     if (!req.file) return res.status(400).json({ message: "Resume PDF is required." })
-    let resumeContent
-    try {
+    const wantsStream = req.headers.accept?.includes("text/event-stream")
+    const idempotencyKey = req.headers["idempotency-key"]
+    let idempotencyRecord
+    if (wantsStream && idempotencyKey) {
+        if (typeof idempotencyKey !== "string" || idempotencyKey.length > 128) return res.status(400).json({ message: "Invalid idempotency key." })
         try {
+            idempotencyRecord = await analysisIdempotencyModel.create({ user: req.user.id, key: idempotencyKey, status: "processing", expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+        } catch (error) {
+            if (error?.code !== 11000) throw error
+            idempotencyRecord = await analysisIdempotencyModel.findOne({ user: req.user.id, key: idempotencyKey })
+            if (idempotencyRecord?.status === "completed" && idempotencyRecord.report) {
+                const existing = await interviewReportModel.findOne({ _id: idempotencyRecord.report, user: req.user.id })
+                if (existing) return streamExistingReport(res, existing)
+            }
+            if (idempotencyRecord?.status === "processing") return res.status(409).json({ message: "Resume analysis is already in progress. Please retry shortly." })
+            if (idempotencyRecord) await analysisIdempotencyModel.deleteOne({ _id: idempotencyRecord._id })
+            idempotencyRecord = await analysisIdempotencyModel.create({ user: req.user.id, key: idempotencyKey, status: "processing", expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+        }
+    }
+    let resumeContent
+    let streamStarted = false
+    let disconnected = false
+    const send = (event, data) => {
+        if (!streamStarted || disconnected || res.writableEnded || res.destroyed) return false
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        return true
+    }
+    const startStream = () => {
+        if (!wantsStream) return
+        streamStarted = true
+        res.status(200).set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" })
+        if (typeof res.flushHeaders === "function") res.flushHeaders()
+        req.on("aborted", () => { disconnected = true })
+        res.on("close", () => { if (!res.writableEnded) disconnected = true })
+    }
+    try {
+        startStream()
+        try {
+            send("progress", { stage: "resume", status: "started" })
             resumeContent = await (new pdfParse.PDFParse(Uint8Array.from(req.file.buffer))).getText()
         } catch (error) {
             throw Object.assign(new Error("Resume text extraction failed"), { stage: "pdf_extraction", cause: error })
         }
         if (!resumeContent || typeof resumeContent.text !== "string" || !resumeContent.text.trim()) throw Object.assign(new Error("Resume text extraction failed"), { stage: "pdf_extraction" })
         const jdRequirements = extractJdRequirements(jobDescription)
+        send("progress", { stage: "role", status: "completed" })
         const resumeEvidence = extractResumeEvidence(resumeContent.text)
+        send("progress", { stage: "resume", status: "completed" })
         const matchingResult = matchJdRequirements(jdRequirements, resumeEvidence)
+        send("progress", { stage: "matching", status: "completed" })
         const qualitativeAnalysis = await generateQualitativeResumeAnalysis({ resume: resumeContent.text, selfDescription, jobDescription })
+        send("progress", { stage: "analysis", status: "started" })
         const scoringResult = assembleResumeAnalysisReport({ jdRequirements, resumeEvidence, matchingResult, qualitativeAnalysis })
         const mappedReport = mapResumeAnalysisReport({ scoringResult, qualitativeAnalysis })
         const interviewReport = await interviewReportModel.create({ user: req.user.id, resume: resumeContent.text, selfDescription, jobDescription, title: req.body.title || "Resume Analysis", ...mappedReport })
+        if (idempotencyRecord) await analysisIdempotencyModel.findByIdAndUpdate(idempotencyRecord._id, { status: "completed", report: interviewReport._id })
+        if (wantsStream) {
+            send("progress", { stage: "analysis", status: "completed" })
+            send("complete", { message: "Interview report generated successfully.", interviewReport })
+            return res.end()
+        }
         return res.status(201).json({ message: "Interview report generated successfully.", interviewReport })
     } catch (error) {
         console.error("Resume analysis service failure", {
@@ -42,12 +89,25 @@ async function generateInterViewReportController(req, res) {
             ...(typeof error?.providerCode === "string" ? { providerCode: error.providerCode } : {}),
             ...(Array.isArray(error?.zodIssues) ? { zodIssues: error.zodIssues } : {})
         })
+        if (idempotencyRecord) await analysisIdempotencyModel.findByIdAndUpdate(idempotencyRecord._id, { status: "failed", expiresAt: new Date(Date.now() + 10 * 60 * 1000) }).catch(() => {})
+        if (streamStarted) {
+            send("error", { code: error?.stage || "analysis_failed", message: error?.stage === "pdf_extraction" ? "We couldn't read that resume PDF." : "Resume analysis service is temporarily unavailable." })
+            if (!res.writableEnded && !res.destroyed) res.end()
+            return
+        }
         const clientStatus = error?.stage === "pdf_extraction" ? 400 : 502
         return res.status(clientStatus).json({
             message: "Resume analysis service is temporarily unavailable."
         })
     }
 
+}
+
+function streamExistingReport(res, report) {
+    res.status(200).set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" })
+    if (typeof res.flushHeaders === "function") res.flushHeaders()
+    res.write(`event: complete\ndata: ${JSON.stringify({ message: "Interview report generated successfully.", interviewReport: report })}\n\n`)
+    return res.end()
 }
 
 /**

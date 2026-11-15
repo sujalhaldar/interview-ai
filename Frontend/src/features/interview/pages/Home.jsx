@@ -5,13 +5,14 @@ import { useNavigate } from 'react-router'
 
 const Home = () => {
 
-    const { loading, generateReport,reports } = useInterview()
+    const { loading, analysisProgress, generateReport,reports } = useInterview()
     const [ jobDescription, setJobDescription ] = useState("")
     const [ selfDescription, setSelfDescription ] = useState("")
     const [ resumeFile, setResumeFile ] = useState(null)
     const [ generationError, setGenerationError ] = useState('')
     const [ fieldErrors, setFieldErrors ] = useState({ jobDescription: '', resume: '' })
     const resumeInputRef = useRef()
+    const idempotencyKeyRef = useRef(null)
 
     const navigate = useNavigate()
 
@@ -31,11 +32,13 @@ const Home = () => {
         }
 
         try {
-            const data = await generateReport({ jobDescription, selfDescription, resumeFile })
+            if (!idempotencyKeyRef.current) idempotencyKeyRef.current = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`
+            const data = await generateReport({ jobDescription, selfDescription, resumeFile, idempotencyKey: idempotencyKeyRef.current })
             if (!data?._id) {
                 throw new Error('Generated report did not include a report ID.')
             }
             navigate(`/interview/${data._id}`)
+            idempotencyKeyRef.current = null
         } catch (error) {
             const status = error?.response?.status
             const backendMessage = error?.response?.data?.message
@@ -52,7 +55,17 @@ const Home = () => {
     if (loading) {
         return (
             <main className='loading-screen'>
-                <h1>Loading your interview plan...</h1>
+                <h1>Finding the story in your experience.</h1>
+                <p>Analyzing your resume against the role to uncover your strengths and opportunities.</p>
+                <div className='analysis-progress-bar' aria-hidden='true'><span /></div>
+                <ol className='analysis-stages'>
+                    {[['resume', 'Reading your resume'], ['role', 'Understanding the role'], ['matching', 'Matching your experience'], ['analysis', 'Building your analysis']].map(([stage, label]) => {
+                        const current = analysisProgress?.stage
+                        const complete = current === 'role' && stage === 'resume' || current === 'matching' && ['resume', 'role'].includes(stage) || current === 'analysis' && ['resume', 'role', 'matching'].includes(stage)
+                        const active = current === stage
+                        return <li key={stage} className={`${complete ? 'is-complete' : ''} ${active ? 'is-active' : ''}`}><span className='stage-icon'>{complete ? '✓' : active ? '•' : '○'}</span>{label}</li>
+                    })}
+                </ol>
             </main>
         )
     }

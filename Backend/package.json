@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/pdf-authorization.test.js test/resume-analysis-contract.test.js test/report-generation.integration.test.js test/jd-requirements.test.js test/resume-evidence.test.js test/jd-resume-matching.test.js test/resume-analysis-scoring.test.js test/resume-analysis-report-mapper.test.js test/resume-analysis-model.test.js test/resume-analysis-persistence.integration.test.js",
+    "test": "node --test --test-concurrency=1 test/pdf-authorization.test.js test/resume-analysis-contract.test.js test/report-generation.integration.test.js test/report-generation.sse.test.js test/idempotency-route.integration.test.js test/jd-requirements.test.js test/resume-evidence.test.js test/jd-resume-matching.test.js test/resume-analysis-scoring.test.js test/resume-analysis-report-mapper.test.js test/resume-analysis-model.test.js test/resume-analysis-persistence.integration.test.js",
     "dev": "npx nodemon server.js"
   },
   "keywords": [],

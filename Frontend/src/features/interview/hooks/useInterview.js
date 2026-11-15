@@ -13,16 +13,18 @@ export const useInterview = () => {
         throw new Error("useInterview must be used within an InterviewProvider")
     }
 
-    const { loading, setLoading, report, setReport, reports, setReports } = context
+    const { loading, setLoading, analysisProgress, setAnalysisProgress, report, setReport, reports, setReports } = context
 
-    const generateReport = async ({ jobDescription, selfDescription, resumeFile }) => {
+    const generateReport = async ({ jobDescription, selfDescription, resumeFile, idempotencyKey }) => {
         setLoading(true)
+        setAnalysisProgress({ stage: "resume", status: "started" })
         try {
-            const response = await generateInterviewReport({ jobDescription, selfDescription, resumeFile })
+            const response = await generateInterviewReport({ jobDescription, selfDescription, resumeFile, idempotencyKey, onProgress: setAnalysisProgress })
             setReport(response.interviewReport)
             return response.interviewReport
         } finally {
             setLoading(false)
+            setAnalysisProgress(null)
         }
     }
 
@@ -93,6 +95,6 @@ export const useInterview = () => {
         }
     }, [ interviewId, getReportById, getReports ])
 
-    return { loading, report, reports, generateReport, getReportById, getReports, getResumePdf, saveConfirmedSkills }
+    return { loading, analysisProgress, report, reports, generateReport, getReportById, getReports, getResumePdf, saveConfirmedSkills }
 
 }

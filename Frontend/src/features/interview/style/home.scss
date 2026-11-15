@@ -468,3 +468,59 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
         }
     }
 }
+
+.loading-screen {
+    min-height: 100vh;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 0.8rem;
+    padding: 2rem 1rem;
+    color: $text-primary;
+    text-align: center;
+
+    p { max-width: 34rem; color: $text-muted; margin: 0; line-height: 1.5; }
+}
+
+.analysis-progress-bar {
+    width: min(28rem, 80vw);
+    height: 4px;
+    overflow: hidden;
+    background: $bg-input;
+    border-radius: 999px;
+    margin: 0.75rem 0;
+
+    span {
+        display: block;
+        width: 35%;
+        height: 100%;
+        background: $accent;
+        border-radius: inherit;
+        animation: analysis-slide 1.4s ease-in-out infinite;
+    }
+}
+
+.analysis-stages {
+    display: grid;
+    gap: 0.75rem;
+    width: min(28rem, 80vw);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    text-align: left;
+    color: $text-muted;
+
+    li { display: flex; align-items: center; gap: 0.7rem; }
+    .stage-icon { width: 1.25rem; color: $text-muted; text-align: center; }
+    .is-active, .is-complete { color: $text-primary; }
+    .is-active .stage-icon, .is-complete .stage-icon { color: $accent; }
+}
+
+@keyframes analysis-slide {
+    from { transform: translateX(-140%); }
+    to { transform: translateX(300%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .analysis-progress-bar span { animation: none; transform: translateX(90%); }
+}
