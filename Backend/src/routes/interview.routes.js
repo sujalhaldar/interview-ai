@@ -22,6 +22,8 @@ interviewRouter.post("/", authMiddleware.authUser, upload.single("resume"), inte
 interviewRouter.get("/report/:interviewId", authMiddleware.authUser, interviewController.getInterviewReportByIdController)
 
 interviewRouter.patch("/report/:interviewId/confirmed-skills", authMiddleware.authUser, interviewController.updateConfirmedSkillsController)
+interviewRouter.patch("/report/:interviewId/title", authMiddleware.authUser, interviewController.updateReportTitleController)
+interviewRouter.patch("/report/:interviewId/pin", authMiddleware.authUser, interviewController.updateReportPinController)
 
 
 /**

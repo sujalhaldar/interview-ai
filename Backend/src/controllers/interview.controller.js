@@ -8,6 +8,7 @@ const { mapResumeAnalysisReport } = require("../services/resume-analysis-report-
 const dictionary = require("../services/jd-requirements.dictionary")
 const interviewReportModel = require("../models/interviewReport.model")
 const analysisIdempotencyModel = require("../models/analysis-idempotency.model")
+const mongoose = require("mongoose")
 const { generateReportTitle } = require("../services/report-title.service")
 
 
@@ -145,6 +146,47 @@ async function getAllInterviewReportsController(req, res) {
     })
 }
 
+async function updateReportTitleController(req, res) {
+    const { interviewId } = req.params
+    const title = req.body?.title
+    if (!mongoose.Types.ObjectId.isValid(interviewId) || typeof title !== "string" || !title.trim() || title.trim().length > 160) {
+        return res.status(400).json({ message: "A valid report ID and title are required." })
+    }
+    const report = await interviewReportModel.findOneAndUpdate(
+        { _id: interviewId, user: req.user.id },
+        { $set: { title: title.trim() } },
+        { new: true, runValidators: true }
+    )
+    if (!report) return res.status(404).json({ message: "Interview report not found." })
+    return res.status(200).json({ message: "Interview report renamed successfully.", interviewReport: report })
+}
+
+async function updateReportPinController(req, res) {
+    const { interviewId } = req.params
+    const { isPinned } = req.body || {}
+    if (!mongoose.Types.ObjectId.isValid(interviewId) || typeof isPinned !== "boolean") return res.status(400).json({ message: "isPinned must be a boolean." })
+    const ownerQuery = { _id: interviewId, user: req.user.id }
+    let report
+    if (isPinned) {
+        report = await interviewReportModel.findOneAndUpdate(
+            { ...ownerQuery, isPinned: { $ne: true } },
+            { $set: { isPinned: true, pinnedAt: new Date() } },
+            { new: true, runValidators: true }
+        )
+    } else {
+        report = await interviewReportModel.findOneAndUpdate(
+            { ...ownerQuery, isPinned: true },
+            { $set: { isPinned: false, pinnedAt: null } },
+            { new: true, runValidators: true }
+        )
+    }
+    if (!report) {
+        report = await interviewReportModel.findOne(ownerQuery)
+        if (!report) return res.status(404).json({ message: "Interview report not found." })
+    }
+    return res.status(200).json({ message: isPinned ? "Interview report pinned successfully." : "Interview report unpinned successfully.", interviewReport: report })
+}
+
 
 /**
  * @description Controller to generate resume PDF based on user self description, resume and job description.
@@ -256,4 +298,4 @@ async function updateConfirmedSkillsController(req, res) {
     }
 }
 
-module.exports = { generateInterViewReportController, getInterviewReportByIdController, getAllInterviewReportsController, generateResumePdfController, updateConfirmedSkillsController, normalizeConfirmedSkills, addConfirmedEvidence }
+module.exports = { generateInterViewReportController, getInterviewReportByIdController, getAllInterviewReportsController, updateReportTitleController, updateReportPinController, generateResumePdfController, updateConfirmedSkillsController, normalizeConfirmedSkills, addConfirmedEvidence }
