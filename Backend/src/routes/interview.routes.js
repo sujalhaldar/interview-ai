@@ -21,6 +21,8 @@ interviewRouter.post("/", authMiddleware.authUser, upload.single("resume"), inte
  */
 interviewRouter.get("/report/:interviewId", authMiddleware.authUser, interviewController.getInterviewReportByIdController)
 
+interviewRouter.patch("/report/:interviewId/confirmed-skills", authMiddleware.authUser, interviewController.updateConfirmedSkillsController)
+
 
 /**
  * @route GET /api/interview/

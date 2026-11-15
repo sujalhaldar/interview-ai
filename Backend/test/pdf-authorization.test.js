@@ -19,8 +19,9 @@ const aiService = require("../src/services/ai.service")
 const originalReportFindOne = interviewReportModel.findOne
 const originalBlacklistFindOne = tokenBlacklistModel.findOne
 const originalGenerateResumePdf = aiService.generateResumePdf
+let capturedResumeGenerationArgs
 
-aiService.generateResumePdf = async () => Buffer.from("%PDF-test-content")
+aiService.generateResumePdf = async (args) => { capturedResumeGenerationArgs = args; return Buffer.from("%PDF-test-content") }
 
 const app = require("../src/app")
 
@@ -35,6 +36,7 @@ function authenticatedRequest(userId, reportId) {
 }
 
 beforeEach(() => {
+    capturedResumeGenerationArgs = undefined
     tokenBlacklistModel.findOne = async () => null
 
     interviewReportModel.findOne = async (query) => {
@@ -42,7 +44,16 @@ beforeEach(() => {
             return {
                 resume: "owner resume",
                 jobDescription: "owner job",
-                selfDescription: "owner profile"
+                selfDescription: "owner profile",
+                analysisVersion: "2.0",
+                confirmedSkills: [{ normalizedName: "Docker", originalText: "Docker", sourceType: "userConfirmed", confidence: "userConfirmed" }],
+                requirementAnalysis: { requirements: [{ normalizedName: "Docker", status: "matched" }] },
+                strengths: ["Evidence-backed strength"],
+                areasOfImprovement: ["Evidence-backed improvement"],
+                resumeGaps: [],
+                skillGaps: [],
+                experienceAlignment: "Experience context",
+                educationCertificationAnalysis: "Education context"
             }
         }
 
@@ -77,6 +88,16 @@ test("authenticated owner receives their report PDF", async () => {
     assert.equal(response.status, 200)
     assert.equal(response.headers["content-type"], "application/pdf")
     assert.equal(response.body.toString(), "%PDF-test-content")
+})
+
+test("authenticated owner generation uses the latest persisted V2 context", async () => {
+    const response = await authenticatedRequest(OWNER_ID, OWNER_REPORT_ID)
+
+    assert.equal(response.status, 200)
+    assert.equal(capturedResumeGenerationArgs.analysisContext.analysisVersion, "2.0")
+    assert.deepEqual(capturedResumeGenerationArgs.analysisContext.confirmedSkills.map(skill => skill.normalizedName), ["Docker"])
+    assert.equal(capturedResumeGenerationArgs.analysisContext.requirementAnalysis.requirements[0].normalizedName, "Docker")
+    assert.deepEqual(capturedResumeGenerationArgs.analysisContext.strengths, ["Evidence-backed strength"])
 })
 
 test("authenticated non-owner receives 404 for another user's report", async () => {

@@ -1,195 +1,169 @@
-import React, { useState, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router'
+import { useInterview } from '../hooks/useInterview'
+import { adaptInterviewReport } from '../report.adapter'
 import '../style/interview.scss'
-import { useInterview } from '../hooks/useInterview.js'
-import { useNavigate, useParams } from 'react-router'
-
-
 
 const NAV_ITEMS = [
-    { id: 'technical', label: 'Technical Questions', icon: (<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>) },
-    { id: 'behavioral', label: 'Behavioral Questions', icon: (<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>) },
-    { id: 'roadmap', label: 'Road Map', icon: (<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11" /></svg>) },
+    ['summary', 'Overall Summary'],
+    ['skills', 'Keyword & Skill Breakdown'],
+    ['experience', 'Experience Alignment'],
+    ['education', 'Education & Certifications'],
+    ['quality', 'Resume Quality'],
 ]
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-const QuestionCard = ({ item, index }) => {
-    const [ open, setOpen ] = useState(false)
-    return (
-        <div className='q-card'>
-            <div className='q-card__header' onClick={() => setOpen(o => !o)}>
-                <span className='q-card__index'>Q{index + 1}</span>
-                <p className='q-card__question'>{item.question}</p>
-                <span className={`q-card__chevron ${open ? 'q-card__chevron--open' : ''}`}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-                </span>
-            </div>
-            {open && (
-                <div className='q-card__body'>
-                    <div className='q-card__section'>
-                        <span className='q-card__tag q-card__tag--intention'>Intention</span>
-                        <p>{item.intention}</p>
-                    </div>
-                    <div className='q-card__section'>
-                        <span className='q-card__tag q-card__tag--answer'>Model Answer</span>
-                        <p>{item.answer}</p>
-                    </div>
-                </div>
-            )}
-        </div>
-    )
+const textOf = (value) => {
+    if (typeof value === 'string') return value
+    if (!value || typeof value !== 'object') return ''
+    return value.explanation || value.description || value.text || value.title || ''
 }
 
-const RoadMapDay = ({ day }) => (
-    <div className='roadmap-day'>
-        <div className='roadmap-day__header'>
-            <span className='roadmap-day__badge'>Day {day.day}</span>
-            <h3 className='roadmap-day__focus'>{day.focus}</h3>
-        </div>
-        <ul className='roadmap-day__tasks'>
-            {day.tasks.map((task, i) => (
-                <li key={i}>
-                    <span className='roadmap-day__bullet' />
-                    {task}
-                </li>
+const evidenceOf = (value) => {
+    if (!value || typeof value !== 'object') return []
+    const evidence = value.evidence ?? value.supportingEvidence ?? value.matchedEvidence
+    if (Array.isArray(evidence)) return evidence.filter(Boolean)
+    return evidence ? [evidence] : []
+}
+
+const evidenceText = (value) => {
+    if (typeof value === 'string') return value
+    if (!value || typeof value !== 'object') return ''
+    return value.evidenceText || value.originalText || value.normalizedValue || ''
+}
+
+function QualitativeList({ items, empty = 'No information is available in this report.' }) {
+    if (!items.length) return <p className='summary-empty'>{empty}</p>
+    return (
+        <div className='summary-item-list'>
+            {items.map((item, index) => (
+                <article className='summary-item' key={item.id || (textOf(item) + '-' + index)}>
+                    {typeof item === 'object' && item.title && <h3>{item.title}</h3>}
+                    <p>{textOf(item)}</p>
+                    {evidenceOf(item).length > 0 && <div className='summary-item__evidence'><span>Evidence</span><ul className='summary-evidence'>{evidenceOf(item).map((evidence, evidenceIndex) => <li key={evidenceText(evidence) + '-' + evidenceIndex}>{evidenceText(evidence)}</li>)}</ul></div>}
+                </article>
             ))}
-        </ul>
-    </div>
-)
-
-// ── Main Component ────────────────────────────────────────────────────────────
-const Interview = () => {
-    const [ activeNav, setActiveNav ] = useState('technical')
-    const { report, getReportById, loading, getResumePdf } = useInterview()
-    const { interviewId } = useParams()
-
-    useEffect(() => {
-        if (interviewId) {
-            getReportById(interviewId)
-        }
-    }, [ interviewId ])
-
-
-
-    if (loading || !report) {
-        return (
-            <main className='loading-screen'>
-                <h1>Loading your interview plan...</h1>
-            </main>
-        )
-    }
-
-    const scoreColor =
-        report.matchScore >= 80 ? 'score--high' :
-            report.matchScore >= 60 ? 'score--mid' : 'score--low'
-
-
-    return (
-        <div className='interview-page'>
-            <div className='interview-layout'>
-
-                {/* ── Left Nav ── */}
-                <nav className='interview-nav'>
-                    <div className="nav-content">
-                        <p className='interview-nav__label'>Sections</p>
-                        {NAV_ITEMS.map(item => (
-                            <button
-                                key={item.id}
-                                className={`interview-nav__item ${activeNav === item.id ? 'interview-nav__item--active' : ''}`}
-                                onClick={() => setActiveNav(item.id)}
-                            >
-                                <span className='interview-nav__icon'>{item.icon}</span>
-                                {item.label}
-                            </button>
-                        ))}
-                    </div>
-                    <button
-                        onClick={() => { getResumePdf(interviewId) }}
-                        className='button primary-button' >
-                        <svg height={"0.8rem"} style={{ marginRight: "0.8rem" }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10.6144 17.7956 11.492 15.7854C12.2731 13.9966 13.6789 12.5726 15.4325 11.7942L17.8482 10.7219C18.6162 10.381 18.6162 9.26368 17.8482 8.92277L15.5079 7.88394C13.7092 7.08552 12.2782 5.60881 11.5105 3.75894L10.6215 1.61673C10.2916.821765 9.19319.821767 8.8633 1.61673L7.97427 3.75892C7.20657 5.60881 5.77553 7.08552 3.97685 7.88394L1.63658 8.92277C.868537 9.26368.868536 10.381 1.63658 10.7219L4.0523 11.7942C5.80589 12.5726 7.21171 13.9966 7.99275 15.7854L8.8704 17.7956C9.20776 18.5682 10.277 18.5682 10.6144 17.7956ZM19.4014 22.6899 19.6482 22.1242C20.0882 21.1156 20.8807 20.3125 21.8695 19.8732L22.6299 19.5353C23.0412 19.3526 23.0412 18.7549 22.6299 18.5722L21.9121 18.2532C20.8978 17.8026 20.0911 16.9698 19.6586 15.9269L19.4052 15.3156C19.2285 14.8896 18.6395 14.8896 18.4628 15.3156L18.2094 15.9269C17.777 16.9698 16.9703 17.8026 15.956 18.2532L15.2381 18.5722C14.8269 18.7549 14.8269 19.3526 15.2381 19.5353L15.9985 19.8732C16.9874 20.3125 17.7798 21.1156 18.2198 22.1242L18.4667 22.6899C18.6473 23.104 19.2207 23.104 19.4014 22.6899Z"></path></svg>
-                        Download Resume
-                    </button>
-                </nav>
-
-                <div className='interview-divider' />
-
-                {/* ── Center Content ── */}
-                <main className='interview-content'>
-                    {activeNav === 'technical' && (
-                        <section>
-                            <div className='content-header'>
-                                <h2>Technical Questions</h2>
-                                <span className='content-header__count'>{report.technicalQuestions.length} questions</span>
-                            </div>
-                            <div className='q-list'>
-                                {report.technicalQuestions.map((q, i) => (
-                                    <QuestionCard key={i} item={q} index={i} />
-                                ))}
-                            </div>
-                        </section>
-                    )}
-
-                    {activeNav === 'behavioral' && (
-                        <section>
-                            <div className='content-header'>
-                                <h2>Behavioral Questions</h2>
-                                <span className='content-header__count'>{report.behavioralQuestions.length} questions</span>
-                            </div>
-                            <div className='q-list'>
-                                {report.behavioralQuestions.map((q, i) => (
-                                    <QuestionCard key={i} item={q} index={i} />
-                                ))}
-                            </div>
-                        </section>
-                    )}
-
-                    {activeNav === 'roadmap' && (
-                        <section>
-                            <div className='content-header'>
-                                <h2>Preparation Road Map</h2>
-                                <span className='content-header__count'>{report.preparationPlan.length}-day plan</span>
-                            </div>
-                            <div className='roadmap-list'>
-                                {report.preparationPlan.map((day) => (
-                                    <RoadMapDay key={day.day} day={day} />
-                                ))}
-                            </div>
-                        </section>
-                    )}
-                </main>
-
-                <div className='interview-divider' />
-
-                {/* ── Right Sidebar ── */}
-                <aside className='interview-sidebar'>
-
-                    {/* Match Score */}
-                    <div className='match-score'>
-                        <p className='match-score__label'>Match Score</p>
-                        <div className={`match-score__ring ${scoreColor}`}>
-                            <span className='match-score__value'>{report.matchScore}</span>
-                            <span className='match-score__pct'>%</span>
-                        </div>
-                        <p className='match-score__sub'>Strong match for this role</p>
-                    </div>
-
-                    <div className='sidebar-divider' />
-
-                    {/* Skill Gaps */}
-                    <div className='skill-gaps'>
-                        <p className='skill-gaps__label'>Skill Gaps</p>
-                        <div className='skill-gaps__list'>
-                            {report.skillGaps.map((gap, i) => (
-                                <span key={i} className={`skill-tag skill-tag--${gap.severity}`}>
-                                    {gap.skill}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-
-                </aside>
-            </div>
         </div>
     )
 }
 
-export default Interview
+function RequirementList({ requirements, empty = 'No requirements are available for this section.' }) {
+    if (!requirements.length) return <p className='summary-empty'>{empty}</p>
+    return (
+        <div className='requirement-list'>
+            {requirements.map((requirement, index) => (
+                <article className='requirement-item' key={(requirement.normalizedName || requirement.originalText || 'requirement') + '-' + index}>
+                    <div className='summary-panel__heading'><h3>{requirement.originalText || requirement.normalizedName || 'Requirement'}</h3>{requirement.status && <span className='muted-badge'>{requirement.status}</span>}</div>
+                    {requirement.explanation && <p>{requirement.explanation}</p>}
+                    {Array.isArray(requirement.matchedEvidence) && requirement.matchedEvidence.length > 0 && <details className='requirement-evidence'><summary>Supporting evidence ({new Set(requirement.matchedEvidence.map(evidenceText)).size})</summary><ul className='summary-evidence'>{Array.from(new Set(requirement.matchedEvidence.map(evidenceText))).filter(Boolean).map((evidence, evidenceIndex) => <li key={evidence + '-' + evidenceIndex}>{evidence}</li>)}</ul></details>}
+                </article>
+            ))}
+        </div>
+    )
+}
+
+function SummarySection({ report }) {
+    return <>
+        <div className='summary-intro'><p className='summary-intro__eyebrow'>Overall assessment</p><p className='summary-intro__text'>{report.overallSummary || 'No overall assessment is available for this report.'}</p></div>
+        <div className='summary-grid'>
+            <section className='summary-panel'><div className='summary-panel__heading'><h2>Key strengths</h2><span className='muted-badge'>{report.strengths.length}</span></div><QualitativeList items={report.strengths} /></section>
+            <section className='summary-panel'><div className='summary-panel__heading'><h2>Areas of improvement</h2><span className='muted-badge'>{report.areasOfImprovement.length}</span></div><QualitativeList items={report.areasOfImprovement} /></section>
+        </div>
+        <section className='summary-panel summary-panel--gaps'><div className='summary-panel__heading'><div><h2>Resume gaps</h2><p className='summary-panel__hint'>Only gaps recorded by the analysis are shown; absence of evidence is not treated as proof of absence.</p></div></div><QualitativeList items={report.resumeGaps} empty='No resume gaps were recorded.' /></section>
+    </>
+}
+
+function SkillsSection({ report, selectedSkills, onToggle }) {
+    const groups = [['Matched requirements', report.matchedRequirements], ['Partial requirements', report.partialRequirements], ['Missing requirements', report.missingRequirements], ['Needs verification', report.needsVerificationRequirements]]
+    const missingSkills = report.missingRequirements.filter(item => ['programmingLanguage', 'frameworkOrLibrary', 'toolOrPlatform', 'database', 'other'].includes(item.category))
+    return <div className='summary-item-list'>
+        <section className='summary-panel'><div className='summary-panel__heading'><div><h2>Confirm skills</h2><p className='summary-panel__hint'>Know any of these skills? Select the ones you're familiar with to add them to your tailored resume.</p></div></div><div className='skill-gaps__list'>{missingSkills.map(skill => { const name = skill.normalizedName || skill.originalText; const checked = selectedSkills.has(name.toLowerCase()); return <label className={'skill-tag skill-tag--' + (checked ? 'low' : 'medium')} key={name}><input type='checkbox' checked={checked} onChange={() => onToggle(name)} />{name}</label> })}</div>{!missingSkills.length && <p className='summary-empty'>No selectable missing skills were recorded.</p>}</section>
+        {selectedSkills.size > 0 && <section className='summary-panel'><div className='summary-panel__heading'><h2>Confirmed Skills</h2><span className='muted-badge'>{selectedSkills.size}</span></div><div className='skill-gaps__list'>{Array.from(selectedSkills).map(skill => <span className='skill-tag skill-tag--low' key={skill}>{skill}</span>)}</div></section>}
+        {groups.map(([title, requirements]) => <section className='summary-panel' key={title}><div className='summary-panel__heading'><h2>{title}</h2><span className='muted-badge'>{requirements.length}</span></div><RequirementList requirements={requirements} /></section>)}
+    </div>
+}
+
+function DetailSection({ title, body, requirements }) {
+    return <>
+        <section className='analysis-copy'><p className='summary-intro__eyebrow'>{title}</p><p className='summary-intro__text'>{textOf(body) || 'No qualitative analysis is available for this section.'}</p></section>
+        {requirements && <section className='analysis-group'><div className='summary-panel__heading'><div><h2>Deterministic requirement evidence</h2><p className='summary-panel__hint'>Evidence is grouped by requirement and remains separate from the qualitative assessment.</p></div><span className='muted-badge'>{requirements.length}</span></div><RequirementList requirements={requirements} /></section>}
+    </>
+}
+
+const CATEGORY_LABELS = {
+    requiredTechnicalSkills: 'Technical skills',
+    relevantProfessionalExperience: 'Relevant experience',
+    toolsAndTechnologies: 'Tools & technologies',
+    educationAndCertifications: 'Education & certifications',
+}
+
+function formatCategory(value) {
+    return CATEGORY_LABELS[value] || String(value || 'Other').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, letter => letter.toUpperCase())
+}
+
+function formatScore(value) {
+    return value == null || !Number.isFinite(Number(value)) ? '—' : Math.round(Number(value)) + '%'
+}
+
+function ScoreSidebar({ report, isDirty, saving, saveError, saveSuccess, onSave }) {
+    const score = report.matchScore
+    const gaps = [...report.partialRequirements, ...report.missingRequirements, ...report.needsVerificationRequirements]
+    const eligibility = report.eligibility && typeof report.eligibility === 'object' && Object.keys(report.eligibility).length > 0 ? report.eligibility : null
+    return <aside className='interview-sidebar'>
+        <section className='overview-block'><h2>Overall match</h2><div className='overview-score'><div className='overview-score__ring' style={{ '--score': (score ?? 0) + '%' }}><div className='overview-score__inner'><strong className={score === null ? 'overview-score__placeholder' : ''}>{score === null ? '—' : Math.round(score)}<span className='overview-score__unit'>{score === null ? '' : '%'}</span></strong></div></div><span className='overview-score__caption'>{score === null ? 'Score unavailable' : 'Backend-calculated hiring fit'}</span></div></section>
+        <div className='sidebar-divider' />
+        <section className='overview-block'><div className='overview-block__heading'><h2>Category scores</h2></div>{report.categoryScores.length ? <div className='category-score-list'>{report.categoryScores.map((category) => <div className='category-score' key={category.category}><div className='category-score__header'><span title={formatCategory(category.category)}>{formatCategory(category.category)}</span><strong>{formatScore(category.score)}</strong></div><div className='category-score__track' role='progressbar' aria-label={formatCategory(category.category)} aria-valuenow={category.score == null ? undefined : Math.round(category.score)} aria-valuemin='0' aria-valuemax='100'><span style={{ width: category.score == null ? '0%' : Math.max(0, Math.min(100, Number(category.score))) + '%' }} /></div>{category.applicableRequirementCount != null && <small>{category.applicableRequirementCount} applicable requirement{category.applicableRequirementCount === 1 ? '' : 's'}</small>}</div>)}</div> : <p className='empty-state'>No category scores are available.</p>}</section>
+        <div className='sidebar-divider' />
+        <section className='overview-block'><div className='overview-block__heading'><h2>Critical skill gaps</h2><span className='muted-badge'>{gaps.length}</span></div>{gaps.length ? <ul className='gap-list'>{gaps.slice(0, 8).map((gap, index) => <li key={(gap.normalizedName || gap.originalText || 'gap') + '-' + index}><span>{gap.normalizedName || gap.originalText || 'Unspecified requirement'}</span><small className={'gap-status gap-status--' + gap.status}>{formatCategory(gap.status)}</small></li>)}</ul> : <p className='empty-state'>No critical gaps were recorded.</p>}</section>
+        {eligibility && <><div className='sidebar-divider' /><section className='overview-block'><div className='overview-block__heading'><h2>Eligibility</h2></div><div className='eligibility-list'>{Object.entries(eligibility).map(([key, value]) => <div className='eligibility-row' key={key}><span>{key}</span><strong>{value?.status || value || 'Unknown'}</strong></div>)}</div></section></>}
+        {isDirty && <section className='overview-block'><button className='button primary-button' type='button' disabled={saving} onClick={onSave}>{saving ? 'Saving…' : 'Save Changes'}</button>{saveError && <p className='empty-state'>{saveError}</p>}{saveSuccess && <p className='empty-state'>Changes saved.</p>}</section>}
+    </aside>
+}
+
+export default function Interview() {
+    const { interviewId } = useParams()
+    const { report: rawReport, loading, getResumePdf, saveConfirmedSkills } = useInterview()
+    const report = useMemo(() => adaptInterviewReport(rawReport), [rawReport])
+    const [activeSection, setActiveSection] = useState('summary')
+    const [selectedSkills, setSelectedSkills] = useState(new Set())
+    const [savingSkills, setSavingSkills] = useState(false)
+    const [generatingResume, setGeneratingResume] = useState(false)
+    const [resumeDownloadError, setResumeDownloadError] = useState('')
+    const resumeGenerationLock = useRef(false)
+    const [saveError, setSaveError] = useState('')
+    const [saveSuccess, setSaveSuccess] = useState(false)
+    const savedSkills = useMemo(() => new Set(report?.confirmedSkills.map(skill => skill.normalizedName.toLowerCase()) || []), [report])
+    useEffect(() => {
+        if (report) setSelectedSkills(new Set(report.confirmedSkills.map(skill => skill.normalizedName.toLowerCase())))
+        setSaveError('')
+        setSaveSuccess(false)
+    }, [report])
+    if (!report) return <main className='loading-screen'><h1>Loading your resume analysis...</h1></main>
+    const requirementsByCategory = (category) => report.requirements.filter((item) => item.scoringCategory === category || item.category === category)
+    const isDirty = selectedSkills.size !== savedSkills.size || Array.from(selectedSkills).some(skill => !savedSkills.has(skill))
+    const toggleSkill = (skill) => setSelectedSkills(previous => { const next = new Set(previous); const key = skill.toLowerCase(); if (next.has(key)) next.delete(key); else next.add(key); return next })
+    const saveSkills = async () => {
+        setSavingSkills(true); setSaveError(''); setSaveSuccess(false)
+        try { await saveConfirmedSkills(interviewId, Array.from(selectedSkills)); setSaveSuccess(true) } catch { setSaveError('Unable to save changes. Please try again.') } finally { setSavingSkills(false) }
+    }
+    const downloadIdealResume = async () => {
+        if (resumeGenerationLock.current) return
+        resumeGenerationLock.current = true
+        setGeneratingResume(true)
+        setResumeDownloadError('')
+        try {
+            await getResumePdf(interviewId)
+        } catch {
+            setResumeDownloadError('Unable to generate your Ideal Resume. Please try again.')
+        } finally {
+            resumeGenerationLock.current = false
+            setGeneratingResume(false)
+        }
+    }
+    const section = { summary: <SummarySection report={report} />, skills: <SkillsSection report={report} selectedSkills={selectedSkills} onToggle={toggleSkill} />, experience: <DetailSection title='Experience alignment' body={report.experienceAlignment} requirements={requirementsByCategory('relevantProfessionalExperience')} />, education: <DetailSection title='Education & certifications' body={report.educationCertificationAnalysis} requirements={requirementsByCategory('educationAndCertifications')} />, quality: <DetailSection title='Resume quality' body={report.resumeQualityAnalysis} /> }[activeSection]
+    return <main className='interview-page' aria-busy={loading}><div className='interview-layout'>
+        <nav className='interview-nav' aria-label='Resume analysis sections'><div><div className='nav-heading'><span className='nav-heading__title'>Resume Analysis</span></div><div className='nav-items'>{NAV_ITEMS.map(([id, label]) => <button className={'interview-nav__item' + (activeSection === id ? ' interview-nav__item--active' : '')} key={id} type='button' onClick={() => setActiveSection(id)}><span>{label}</span></button>)}</div></div><div className='nav-actions'><button className='button primary-button' type='button' disabled={generatingResume} onClick={downloadIdealResume}>{generatingResume && <span className='button-spinner' aria-hidden='true' />}{generatingResume ? 'Generating…' : 'Download Ideal Resume'}</button>{generatingResume && <p className='download-status' role='status'>Generating your Ideal Resume. This usually takes a few seconds.</p>}{resumeDownloadError && <p className='download-status download-status--error' role='alert'>{resumeDownloadError}</p>}</div></nav>
+        <div className='interview-divider' />
+        <section className='interview-content'><header className='content-header'><div><p className='eyebrow'>Candidate report</p><h1>{NAV_ITEMS.find(([id]) => id === activeSection)?.[1]}</h1></div><span className='content-header__status'>{report.analysisVersion || 'Legacy report'}</span></header>{section}</section>
+        <div className='interview-divider' /><ScoreSidebar report={report} isDirty={isDirty} saving={savingSkills} saveError={saveError} saveSuccess={saveSuccess} onSave={saveSkills} />
+    </div></main>
+}

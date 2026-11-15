@@ -21,21 +21,26 @@ $severity-low: #3fb950;
 // ── Page Shell ────────────────────────────────────────────────────────────────
 .interview-page {
     width: 100%;
-    min-height: 100vh;
+    height: 100dvh;
+    min-height: 0;
     background-color: $bg-page;
     color: $text-primary;
     font-family: $font-stack;
     display: flex;
     align-items: stretch;
-    padding: 1.5rem;
+    padding: 1.5rem clamp(1rem, 2.5vw, 2.5rem);
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 // ── 3-Column Layout ───────────────────────────────────────────────────────────
 .interview-layout {
     display: flex;
     width: 100%;
-    max-width: 1280px;
+    max-width: none;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
     margin: 0 auto;
     background-color: $bg-card;
     border: 1px solid $border-color;
@@ -51,13 +56,17 @@ $severity-low: #3fb950;
 
 // ── Left Nav ─────────────────────────────────────────────────────────────────
 .interview-nav {
-    width: 220px;
+    width: clamp(230px, 17vw, 270px);
     flex-shrink: 0;
     padding: 1.75rem 1rem;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     gap: 0.25rem;
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    overflow: hidden;
 
 
 
@@ -113,10 +122,13 @@ $severity-low: #3fb950;
 // ── Center Content ────────────────────────────────────────────────────────────
 .interview-content {
     flex: 1;
+    min-width: 0;
+    min-height: 0;
     padding: 1.75rem 2rem;
     overflow-y: auto;
     min-height: initial;
-    max-height: calc(100vh - 3rem);
+    height: 100%;
+    max-height: none;
     padding-bottom: 5rem;
     align-items: flex-start;
 
@@ -128,7 +140,7 @@ $severity-low: #3fb950;
 
 
     section {
-        min-height: 100%;
+        min-height: 0;
     }
 }
 
@@ -355,16 +367,163 @@ $severity-low: #3fb950;
 
 // ── Right Sidebar ─────────────────────────────────────────────────────────────
 .interview-sidebar {
-    width: 240px;
+    width: clamp(280px, 21vw, 330px);
+    min-width: 0;
     flex-shrink: 0;
     padding: 1.75rem 1.25rem;
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+.interview-nav > div:first-child { min-height: 0; overflow-y: auto; }
+.nav-actions { flex-shrink: 0; }
+
+// ── Resume analysis foundation ───────────────────────────────────────────────
+.nav-heading {
+    padding: 0 0.75rem 1.25rem;
+    border-bottom: 1px solid $border-color;
+}
+
+.nav-heading__title {
+    display: block;
+    overflow: hidden;
+    color: $text-primary;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nav-items { display: grid; gap: 0.25rem; padding-top: 1rem; }
+.nav-actions { display: grid; gap: 0.6rem; margin-top: 1.5rem; }
+.download-status { margin: 0; color: $text-muted; font-size: 0.78rem; line-height: 1.4; }
+.download-status--error { color: $severity-high; }
+.button-spinner { display: inline-block; width: 0.85rem; height: 0.85rem; margin-right: 0.45rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -0.15em; animation: button-spin 0.7s linear infinite; }
+@keyframes button-spin { to { transform: rotate(360deg); } }
+.eyebrow, .overview-label { margin: 0 0 0.4rem; color: $accent; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.content-header { justify-content: space-between; align-items: flex-end; }
+.content-header h1 { margin: 0; color: $text-primary; font-size: clamp(1.4rem, 2vw, 2rem); }
+.content-header__status, .muted-badge { color: $text-muted; background: $bg-panel; border: 1px solid $border-color; border-radius: 999px; font-size: 0.7rem; padding: 0.25rem 0.55rem; }
+.analysis-placeholder { display: grid; min-height: 22rem; place-items: center; align-content: center; gap: 0.75rem; padding: 2rem; text-align: center; background: $bg-panel; border: 1px dashed $border-color; border-radius: 0.7rem; }
+.analysis-placeholder__icon { color: $accent; font-size: 1.4rem; }
+.analysis-placeholder h2 { max-width: 34rem; margin: 0; color: $text-primary; font-size: 1rem; line-height: 1.6; }
+.analysis-placeholder p, .empty-state { margin: 0; color: $text-muted; font-size: 0.82rem; line-height: 1.5; }
+.summary-intro { margin-bottom: 1.25rem; padding: 1.1rem 1.2rem; background: $bg-panel; border: 1px solid $border-color; border-radius: 0.7rem; }
+.summary-intro__eyebrow, .summary-item__evidence > span, .summary-recommendation > span, .summary-gap-meta dt { margin: 0 0 0.45rem; color: $accent; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+.summary-intro__text { margin: 0; color: $text-primary; font-size: 0.95rem; line-height: 1.7; }
+.summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.summary-panel { padding: 1rem; background: $bg-panel; border: 1px solid $border-color; border-radius: 0.7rem; }
+.summary-panel--gaps { margin-bottom: 2rem; }
+.summary-panel__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.9rem; }
+.summary-panel__heading h2 { margin: 0; color: $text-primary; font-size: 0.98rem; }
+.summary-panel__hint { margin: 0.35rem 0 0; color: $text-muted; font-size: 0.74rem; line-height: 1.45; }
+.summary-item-list { display: grid; gap: 0.75rem; }
+.summary-item { padding: 0.85rem; background: rgba($bg-card, 0.5); border: 1px solid rgba($border-color, 0.9); border-radius: 0.55rem; }
+.summary-item h3 { margin: 0 0 0.4rem; color: $text-primary; font-size: 0.87rem; }
+.summary-item p { margin: 0; color: lighten($text-muted, 12%); font-size: 0.8rem; line-height: 1.55; }
+.summary-item__evidence { margin-top: 0.75rem; }
+.summary-evidence { display: grid; gap: 0.35rem; margin: 0; padding-left: 1rem; color: $text-muted; font-size: 0.76rem; line-height: 1.45; }
+.summary-empty { margin: 0; color: $text-muted; font-size: 0.8rem; line-height: 1.5; }
+.summary-recommendation { margin-top: 0.75rem; padding-top: 0.7rem; border-top: 1px solid rgba($border-color, 0.8); }
+.summary-gap-meta { margin: 0.7rem 0 0; }
+.summary-gap-meta dt { margin-bottom: 0.25rem; color: $text-muted; font-size: 0.65rem; }
+.summary-gap-meta dd { margin: 0; color: lighten($text-muted, 12%); font-size: 0.78rem; line-height: 1.45; }
+.analysis-copy { margin-bottom: 1rem; padding: 1.1rem 1.2rem; background: $bg-panel; border: 1px solid $border-color; border-radius: 0.7rem; }
+.analysis-copy .summary-intro__text { max-width: 72rem; }
+.analysis-group { padding: 1rem; background: rgba($bg-panel, 0.55); border: 1px solid $border-color; border-radius: 0.7rem; }
+.requirement-list { display: grid; gap: 0.6rem; }
+.requirement-item { min-width: 0; padding: 0.85rem; background: $bg-panel; border: 1px solid rgba($border-color, 0.9); border-radius: 0.55rem; }
+.requirement-item .summary-panel__heading { margin-bottom: 0.45rem; }
+.requirement-item .summary-panel__heading h3 { min-width: 0; overflow-wrap: anywhere; }
+.requirement-item p { margin: 0; color: lighten($text-muted, 12%); font-size: 0.8rem; line-height: 1.55; }
+.requirement-evidence { margin-top: 0.65rem; border-top: 1px solid rgba($border-color, 0.75); padding-top: 0.55rem; }
+.requirement-evidence summary { cursor: pointer; color: $accent; font-size: 0.72rem; font-weight: 700; }
+.requirement-evidence .summary-evidence { margin-top: 0.5rem; }
+.overview-block { padding: 0.25rem 0; }
+.overview-block h2 { margin: 0 0 1rem; color: $text-primary; font-size: 0.95rem; }
+.overview-block__heading { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.overview-score { display: grid; justify-items: center; gap: 0.75rem; }
+.overview-score__ring { display: grid; width: 9rem; height: 9rem; place-items: center; border-radius: 50%; background: conic-gradient($accent var(--score), $border-color 0); }
+.overview-score__inner { display: flex; width: 7.25rem; height: 7.25rem; align-items: baseline; justify-content: center; gap: 0.15rem; border-radius: 50%; background: $bg-card; }
+.overview-score__inner strong { align-self: center; color: $text-primary; font-size: 2.1rem; }
+.overview-score__inner strong { white-space: nowrap; }
+.overview-score__unit { display: inline; margin-left: 0.1rem; color: $text-muted; font-size: 0.85rem; }
+.overview-score__placeholder { font-size: 2rem !important; }
+.overview-score__caption { color: $text-muted; font-size: 0.78rem; }
+.eligibility-list, .gap-list { display: grid; gap: 0.7rem; }
+.eligibility-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; color: $text-muted; font-size: 0.76rem; }
+.eligibility-row strong { color: $text-primary; font-size: 0.72rem; font-weight: 600; text-align: right; }
+.eligibility-status--met { color: $severity-low !important; }
+.eligibility-status--not-met, .eligibility-status--missing { color: $severity-high !important; }
+.eligibility-status--unknown, .eligibility-status--unavailable { color: $text-muted !important; }
+.gap-list { margin: 0; padding: 0; list-style: none; }
+.gap-list li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.55rem 0; border-bottom: 1px solid rgba($border-color, 0.7); color: $text-primary; font-size: 0.78rem; }
+.gap-list small { color: $severity-medium; font-size: 0.68rem; }
+.category-score-list { display: grid; gap: 0.9rem; }
+.category-score { min-width: 0; }
+.category-score__header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.category-score__header span { min-width: 0; overflow: hidden; color: $text-muted; font-size: 0.76rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.category-score__header strong { flex-shrink: 0; color: $text-primary; font-size: 0.78rem; white-space: nowrap; }
+.category-score__track { height: 0.35rem; margin-top: 0.4rem; overflow: hidden; background: $border-color; border-radius: 999px; }
+.category-score__track span { display: block; height: 100%; background: $accent; border-radius: inherit; transition: width 0.25s ease; }
+.category-score small { display: block; margin-top: 0.3rem; color: $text-muted; font-size: 0.66rem; }
+.gap-list li span { min-width: 0; overflow-wrap: anywhere; }
+.gap-status { flex-shrink: 0; text-transform: capitalize; white-space: nowrap; }
+.gap-status--missing { color: $severity-high !important; }
+.gap-status--partial { color: $severity-medium !important; }
+.gap-status--needsVerification { color: $text-muted !important; }
+
+@media (max-width: 1100px) {
+    .interview-page { padding: 1rem; }
+    .interview-nav { width: 210px; }
+    .interview-sidebar { width: 260px; padding: 1.5rem 1rem; }
+    .interview-content { padding: 1.5rem; }
+}
+
+@media (max-width: 900px) and (min-width: 781px) {
+    .interview-page { padding: 1rem; }
+    .interview-layout { flex-wrap: wrap; height: auto; min-height: calc(100dvh - 2rem); }
+    .interview-nav { width: 210px; }
+    .interview-content { flex-basis: calc(100% - 211px); max-height: calc(100vh - 2rem); }
+    .interview-sidebar { width: 100%; height: auto; overflow: visible; border-top: 1px solid $border-color; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+
+@media (max-width: 780px) {
+    .interview-page { height: auto; min-height: 100dvh; overflow: visible; }
+    .interview-layout { display: grid; grid-template-columns: 1fr; }
+    .interview-divider { display: none; }
+    .interview-nav { width: auto; padding: 1rem; }
+    .nav-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-bottom: 0.75rem; }
+    .nav-items { display: flex; gap: 0.45rem; overflow-x: auto; padding: 0.85rem 0 0.25rem; }
+    .interview-nav__item { min-width: max-content; width: auto; font-size: 0.78rem; }
+    .nav-actions { grid-template-columns: 1fr 1fr; margin-top: 0.9rem; }
+    .interview-nav { height: auto; overflow: visible; }
+    .interview-nav > div:first-child { overflow: visible; }
+    .interview-content { height: auto; max-height: none; min-width: 0; padding: 1.25rem 1rem 2rem; }
+    .interview-sidebar { width: auto; height: auto; overflow: visible; padding: 1.25rem 1rem; }
+    .summary-grid { grid-template-columns: 1fr; }
+    .overview-score__ring { width: 7.5rem; height: 7.5rem; }
+    .overview-score__inner { width: 6rem; height: 6rem; }
+}
+
+@media (max-width: 420px) {
+    .interview-page { padding: 0; }
+    .interview-layout { border-radius: 0; border-left: 0; border-right: 0; }
+    .nav-heading { display: block; }
+    .nav-heading__title { margin-top: 0.35rem; }
+    .nav-actions { grid-template-columns: 1fr; }
+    .content-header { display: block; }
+    .content-header__status { display: inline-block; margin-top: 0.75rem; }
 }
 
 .sidebar-divider {
     height: 1px;
+    min-height: 1px;
+    flex: 0 0 1px;
     background-color: $border-color;
 }
 
@@ -458,6 +617,11 @@ $severity-low: #3fb950;
     border-radius: 0.4rem;
     border: 1px solid;
     cursor: default;
+
+    input {
+        accent-color: $accent;
+        margin-right: 0.4rem;
+    }
 
     &--high {
         color: $severity-high;

@@ -57,3 +57,8 @@ export const generateResumePdf = async ({ interviewReportId }) => {
 
     return response.data
 }
+
+export const updateConfirmedSkills = async ({ interviewReportId, skills }) => {
+    const response = await api.patch("/api/interview/report/" + interviewReportId + "/confirmed-skills", { skills })
+    return response.data
+}

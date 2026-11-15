@@ -9,13 +9,32 @@ const Home = () => {
     const [ jobDescription, setJobDescription ] = useState("")
     const [ selfDescription, setSelfDescription ] = useState("")
     const [ resumeFile, setResumeFile ] = useState(null)
+    const [ generationError, setGenerationError ] = useState('')
     const resumeInputRef = useRef()
 
     const navigate = useNavigate()
 
     const handleGenerateReport = async () => {
-        const data = await generateReport({ jobDescription, selfDescription, resumeFile })
-        if (data?._id) navigate(`/interview/${data._id}`)
+        if (loading) return
+
+        setGenerationError('')
+        try {
+            const data = await generateReport({ jobDescription, selfDescription, resumeFile })
+            if (!data?._id) {
+                throw new Error('Generated report did not include a report ID.')
+            }
+            navigate(`/interview/${data._id}`)
+        } catch (error) {
+            const status = error?.response?.status
+            const backendMessage = error?.response?.data?.message
+            if (status === 502 && backendMessage === 'Resume analysis service is temporarily unavailable.') {
+                setGenerationError(backendMessage)
+            } else if (status === 401) {
+                setGenerationError('Your session has expired. Please sign in again.')
+            } else {
+                setGenerationError('We could not generate your interview strategy. Please try again.')
+            }
+        }
     }
 
     if (loading) {
@@ -123,8 +142,10 @@ const Home = () => {
                 {/* Card Footer */}
                 <div className='interview-card__footer'>
                     <span className='footer-info'>AI-Powered Strategy Generation &bull; Approx 30s</span>
+                    {generationError && <p className='generation-error' role='alert'>{generationError}</p>}
                     <button
                         onClick={handleGenerateReport}
+                        disabled={loading}
                         className='generate-btn'>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" /></svg>
                         Generate My Interview Strategy
