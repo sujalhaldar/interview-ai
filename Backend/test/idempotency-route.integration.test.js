@@ -10,6 +10,7 @@ const pdfParse = require("pdf-parse")
 const ai = require("../src/services/ai.service")
 const blacklist = require("../src/models/blacklist.model")
 const report = require("../src/models/interviewReport.model")
+const analysisIdempotencyModel = require("../src/models/analysis-idempotency.model")
 const originalPdf = pdfParse.PDFParse
 const originalBlacklist = blacklist.findOne
 const originalGemini = ai.generateQualitativeResumeAnalysis
@@ -28,6 +29,7 @@ function submit(user, key) { return request(app).post("/api/interview/").set("Co
 test.before(async () => {
     server = await MongoMemoryServer.create({ instance: { dbName: `idempotency-route-${Date.now()}` } })
     await mongoose.connect(server.getUri())
+    await analysisIdempotencyModel.init()
     pdfParse.PDFParse = class { async getText() { return { text: "resume text" } } }
     blacklist.findOne = async () => null
     ai.generateQualitativeResumeAnalysis = async () => { geminiCalls += 1; return analysis }

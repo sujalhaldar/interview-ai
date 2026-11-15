@@ -20,6 +20,22 @@ test("validates the complete V2 report shape without a database connection", () 
     assert.equal(document.requirementAnalysis.requirements[0].matchedEvidence[0].normalizedValue, "React")
 })
 
+test("applies neutral history metadata defaults to new reports", () => {
+    const document = new interviewReportModel({ analysisVersion: "2.0", jobDescription: "React role", title: "Engineer" })
+    assert.equal(document.isPinned, false)
+    assert.equal(document.pinnedAt, null)
+    assert.equal(document.lastOpenedAt, null)
+})
+
+test("preserves explicit history metadata", () => {
+    const pinnedAt = new Date("2026-11-16T10:00:00.000Z")
+    const lastOpenedAt = new Date("2026-11-16T11:00:00.000Z")
+    const document = new interviewReportModel({ analysisVersion: "2.0", jobDescription: "React role", title: "Engineer", isPinned: true, pinnedAt, lastOpenedAt })
+    assert.equal(document.isPinned, true)
+    assert.equal(document.pinnedAt.toISOString(), pinnedAt.toISOString())
+    assert.equal(document.lastOpenedAt.toISOString(), lastOpenedAt.toISOString())
+})
+
 test("preserves category scores, classifications, evidence, strings, and null eligibility", () => {
     const document = new interviewReportModel(v2)
     assert.equal(document.categoryScores[0].weight, 40)

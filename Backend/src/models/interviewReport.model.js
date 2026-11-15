@@ -167,6 +167,9 @@ const interviewReportSchema = new mongoose.Schema({
     skillGaps: [ mongoose.Schema.Types.Mixed ],
     confirmedSkills: { type: [ confirmedSkillSchema ], default: [] },
     analysisRevision: { type: Number, min: 0, default: 0 },
+    isPinned: { type: Boolean, default: false },
+    pinnedAt: { type: Date, default: null },
+    lastOpenedAt: { type: Date, default: null },
     preparationPlan: [ preparationPlanSchema ],
     user: {
         type: mongoose.Schema.Types.ObjectId,

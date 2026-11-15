@@ -124,3 +124,25 @@ test("persists confirmed skills and analysis revision updates", async () => {
     assert.equal(updated.confirmedSkills[0].normalizedName, "AWS")
     assert.equal(updated.analysisRevision, 1)
 })
+
+test("persists history metadata and preserves V1/V2 reports without it", async () => {
+    const pinnedAt = new Date("2026-11-16T10:00:00.000Z")
+    const lastOpenedAt = new Date("2026-11-16T11:00:00.000Z")
+    const v2 = await interviewReportModel.create({ analysisVersion: "2.0", jobDescription: "React role", title: "Engineer", isPinned: true, pinnedAt, lastOpenedAt })
+    const v1 = await interviewReportModel.create({ analysisVersion: "1.0", jobDescription: "Legacy role", title: "Engineer", categoryAssessments: [] })
+    const v2Historical = await interviewReportModel.create({ analysisVersion: "2.0", jobDescription: "Historical role", title: "Engineer" })
+
+    const persisted = await interviewReportModel.findById(v2._id).lean()
+    assert.equal(persisted.isPinned, true)
+    assert.equal(persisted.pinnedAt.toISOString(), pinnedAt.toISOString())
+    assert.equal(persisted.lastOpenedAt.toISOString(), lastOpenedAt.toISOString())
+
+    for (const id of [v1._id, v2Historical._id]) {
+        const historical = await interviewReportModel.findById(id)
+        assert.ok(historical)
+        assert.equal(historical.isPinned, false)
+        assert.equal(historical.pinnedAt, null)
+        assert.equal(historical.lastOpenedAt, null)
+        assert.ok(historical.toJSON())
+    }
+})
