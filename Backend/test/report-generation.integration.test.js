@@ -160,6 +160,40 @@ test("unauthenticated report generation remains protected", async () => {
     assert.equal(response.status, 401)
 })
 
+test("rejects a missing job description before invoking Gemini", async () => {
+    const response = await request(app)
+        .post("/api/interview/")
+        .set("Cookie", [ authCookie() ])
+        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+
+    assert.equal(response.status, 400)
+    assert.deepEqual(response.body, { message: "Job description is required." })
+    assert.equal(qualitativeCallCount, 0)
+})
+
+test("rejects a missing resume PDF before invoking Gemini", async () => {
+    const response = await request(app)
+        .post("/api/interview/")
+        .set("Cookie", [ authCookie() ])
+        .field("jobDescription", "React role")
+        .field("selfDescription", "Frontend developer")
+
+    assert.equal(response.status, 400)
+    assert.deepEqual(response.body, { message: "Resume PDF is required." })
+    assert.equal(qualitativeCallCount, 0)
+})
+
+test("does not allow self-description-only submissions", async () => {
+    const response = await request(app)
+        .post("/api/interview/")
+        .set("Cookie", [ authCookie() ])
+        .field("jobDescription", "React role")
+        .field("selfDescription", "Frontend developer")
+
+    assert.equal(response.status, 400)
+    assert.equal(qualitativeCallCount, 0)
+})
+
 test("each downstream pipeline failure stops execution and persistence", async () => {
     for (const stage of ["jd", "resume", "matching", "gemini", "scoring", "mapping"]) {
         let createCalled = false

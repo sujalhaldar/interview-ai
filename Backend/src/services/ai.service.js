@@ -201,6 +201,14 @@ function calculateOverallMatchScore(categoryAssessments) {
     ))
 }
 
+/**
+ * Legacy V1 Gemini-driven report generator.
+ *
+ * @deprecated New production report generation must use
+ * generateQualitativeResumeAnalysis() with the deterministic V2 pipeline.
+ * Do not use this function for new production workflows. It is retained
+ * temporarily for backward compatibility pending external-consumer verification.
+ */
 async function generateInterviewReport({ resume, selfDescription, jobDescription }) {
 
 

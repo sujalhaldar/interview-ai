@@ -16,7 +16,8 @@ const interviewReportModel = require("../models/interviewReport.model")
  */
 async function generateInterViewReportController(req, res) {
     const { selfDescription, jobDescription } = req.body
-    if (!req.file || typeof jobDescription !== "string" || !jobDescription.trim()) return res.status(400).json({ message: "Resume and job description are required." })
+    if (typeof jobDescription !== "string" || !jobDescription.trim()) return res.status(400).json({ message: "Job description is required." })
+    if (!req.file) return res.status(400).json({ message: "Resume PDF is required." })
     let resumeContent
     try {
         try {
