@@ -8,6 +8,7 @@ const { mapResumeAnalysisReport } = require("../services/resume-analysis-report-
 const dictionary = require("../services/jd-requirements.dictionary")
 const interviewReportModel = require("../models/interviewReport.model")
 const analysisIdempotencyModel = require("../models/analysis-idempotency.model")
+const { generateReportTitle } = require("../services/report-title.service")
 
 
 
@@ -73,7 +74,7 @@ async function generateInterViewReportController(req, res) {
         send("progress", { stage: "analysis", status: "started" })
         const scoringResult = assembleResumeAnalysisReport({ jdRequirements, resumeEvidence, matchingResult, qualitativeAnalysis })
         const mappedReport = mapResumeAnalysisReport({ scoringResult, qualitativeAnalysis })
-        const interviewReport = await interviewReportModel.create({ user: req.user.id, resume: resumeContent.text, selfDescription, jobDescription, title: req.body.title || "Resume Analysis", ...mappedReport })
+        const interviewReport = await interviewReportModel.create({ user: req.user.id, resume: resumeContent.text, selfDescription, jobDescription, title: generateReportTitle({ jobDescription, requestedTitle: req.body.title }), ...mappedReport })
         if (idempotencyRecord) await analysisIdempotencyModel.findByIdAndUpdate(idempotencyRecord._id, { status: "completed", report: interviewReport._id })
         if (wantsStream) {
             send("progress", { stage: "analysis", status: "completed" })

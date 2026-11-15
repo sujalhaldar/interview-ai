@@ -102,8 +102,24 @@ test("authenticated report generation persists validated analysis and backend sc
     assert.equal(persisted.user, USER_ID)
     assert.equal(persisted.resume, "resume text")
     assert.equal(persisted.analysisVersion, "2.0")
+    assert.match(persisted.title, /^Resume Analysis — \d{2} [A-Z][a-z]{2} \d{4}$/)
     assert.equal(qualitativeCallCount, 1)
     assert.equal(legacyCallCount, 0)
+})
+
+test("persists an explicitly labeled JD title without an additional Gemini call", async () => {
+    let persisted
+    interviewReportModel.create = async document => { persisted = document; return { ...document, _id: "titled-report-id" } }
+
+    const response = await request(app)
+        .post("/api/interview/")
+        .set("Cookie", [ authCookie() ])
+        .field("jobDescription", "Position: Senior Platform Engineer")
+        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+
+    assert.equal(response.status, 201)
+    assert.equal(persisted.title, "Senior Platform Engineer")
+    assert.equal(qualitativeCallCount, 1)
 })
 
 test("invalid Gemini JSON returns 502 and does not persist", async () => {
