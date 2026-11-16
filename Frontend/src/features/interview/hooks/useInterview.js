@@ -1,5 +1,5 @@
-import { getAllInterviewReports, generateInterviewReport, getInterviewReportById, generateResumePdf, updateConfirmedSkills } from "../services/interview.api"
-import { useCallback, useContext, useEffect } from "react"
+import { getAllInterviewReports, generateInterviewReport, getInterviewReportById, generateResumePdf, updateConfirmedSkills, updateReportTitle, updateReportPin, deleteInterviewReport } from "../services/interview.api"
+import { useCallback, useContext, useEffect, useRef } from "react"
 import { InterviewContext } from "../interview.context"
 import { useParams } from "react-router"
 
@@ -13,7 +13,9 @@ export const useInterview = () => {
         throw new Error("useInterview must be used within an InterviewProvider")
     }
 
-    const { loading, setLoading, analysisProgress, setAnalysisProgress, report, setReport, reports, setReports } = context
+    const { loading, setLoading, analysisProgress, setAnalysisProgress, report, setReport, reports, setReports, reportsError, setReportsError } = context
+    const historyRequestGeneration = useRef(0)
+    const historyRefreshError = useRef(null)
 
     const generateReport = async ({ jobDescription, selfDescription, resumeFile, idempotencyKey }) => {
         setLoading(true)
@@ -42,21 +44,28 @@ export const useInterview = () => {
         }
     }, [ setLoading, setReport ])
 
-    const getReports = useCallback(async () => {
-        setLoading(true)
+    const getReports = useCallback(async ({ silent = false } = {}) => {
+        const requestGeneration = ++historyRequestGeneration.current
+        historyRefreshError.current = null
+        if (!silent) setLoading(true)
+        setReportsError('')
         let response = null
         try {
             response = await getAllInterviewReports()
-            setReports(response.interviewReports)
+            if (requestGeneration === historyRequestGeneration.current) setReports(response.interviewReports)
+            if (requestGeneration === historyRequestGeneration.current) historyRefreshError.current = null
+            return response.interviewReports
         } catch (error) {
             console.log(error)
-            setReports([])
+            if (requestGeneration === historyRequestGeneration.current) {
+                historyRefreshError.current = error
+                setReportsError(error?.response?.data?.message || 'Unable to refresh your recent analyses.')
+            }
+            return []
         } finally {
-            setLoading(false)
+            if (!silent && requestGeneration === historyRequestGeneration.current) setLoading(false)
         }
-
-        return response?.interviewReports || []
-    }, [ setLoading, setReports ])
+    }, [ setLoading, setReports, setReportsError ])
 
     const getResumePdf = async (interviewReportId) => {
         setLoading(true)
@@ -87,6 +96,25 @@ export const useInterview = () => {
         }
     }
 
+    const renameReport = async (interviewReportId, title) => {
+        const response = await updateReportTitle({ interviewReportId, title })
+        setReports(previous => previous.map(item => item._id === interviewReportId ? { ...item, ...response.interviewReport } : item))
+        if (report?._id === interviewReportId) setReport(response.interviewReport)
+        return response.interviewReport
+    }
+
+    const pinReport = async (interviewReportId, isPinned) => {
+        const response = await updateReportPin({ interviewReportId, isPinned })
+        await getReports({ silent: true })
+        return { interviewReport: response.interviewReport, historyRefreshError: historyRefreshError.current }
+    }
+
+    const removeReport = async (interviewReportId) => {
+        await deleteInterviewReport(interviewReportId)
+        setReports(previous => previous.filter(item => item._id !== interviewReportId))
+        if (report?._id === interviewReportId) setReport(null)
+    }
+
     useEffect(() => {
         if (interviewId) {
             getReportById(interviewId)
@@ -95,6 +123,6 @@ export const useInterview = () => {
         }
     }, [ interviewId, getReportById, getReports ])
 
-    return { loading, analysisProgress, report, reports, generateReport, getReportById, getReports, getResumePdf, saveConfirmedSkills }
+    return { loading, analysisProgress, report, reports, reportsError, generateReport, getReportById, getReports, getResumePdf, saveConfirmedSkills, renameReport, pinReport, removeReport }
 
 }

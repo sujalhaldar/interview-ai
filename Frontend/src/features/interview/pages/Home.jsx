@@ -1,11 +1,11 @@
-import React, { useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import "../style/home.scss"
 import { useInterview } from '../hooks/useInterview.js'
 import { useNavigate } from 'react-router'
 
 const Home = () => {
 
-    const { loading, analysisProgress, generateReport,reports } = useInterview()
+    const { loading, analysisProgress, generateReport, reports, reportsError, renameReport, pinReport, removeReport } = useInterview()
     const [ jobDescription, setJobDescription ] = useState("")
     const [ selfDescription, setSelfDescription ] = useState("")
     const [ resumeFile, setResumeFile ] = useState(null)
@@ -13,8 +13,47 @@ const Home = () => {
     const [ fieldErrors, setFieldErrors ] = useState({ jobDescription: '', resume: '' })
     const resumeInputRef = useRef()
     const idempotencyKeyRef = useRef(null)
+    const [openMenu, setOpenMenu] = useState(null)
+    const [renameTarget, setRenameTarget] = useState(null)
+    const [renameValue, setRenameValue] = useState('')
+    const [historyError, setHistoryError] = useState('')
+    const [pendingAction, setPendingAction] = useState(null)
+    const renameButtonRefs = useRef({})
 
     const navigate = useNavigate()
+
+    useEffect(() => {
+        if (!renameTarget) return undefined
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') { const id = renameTarget._id; setRenameTarget(null); window.setTimeout(() => renameButtonRefs.current[id]?.focus(), 0); return }
+            if (event.key !== 'Tab') return
+            const dialog = document.querySelector('.rename-modal')
+            if (!dialog) return
+            const focusable = [...dialog.querySelectorAll('input, button')]
+            if (!focusable.length) return
+            const first = focusable[0]
+            const last = focusable[focusable.length - 1]
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+        }
+        document.addEventListener('keydown', onKeyDown)
+        return () => document.removeEventListener('keydown', onKeyDown)
+    }, [renameTarget])
+
+    const runHistoryAction = async (key, action) => {
+        setPendingAction(key)
+        setHistoryError('')
+        try { await action(); setOpenMenu(null) } catch (error) { setHistoryError(error?.response?.data?.message || 'Unable to update this report. Please try again.') } finally { setPendingAction(null) }
+    }
+
+    const submitRename = async (event) => {
+        event.preventDefault()
+        const title = renameValue.trim()
+        if (!title || title.length > 160) return
+        await runHistoryAction(renameTarget._id, async () => { await renameReport(renameTarget._id, title); closeRename() })
+    }
+
+    const closeRename = () => { const id = renameTarget?._id; setRenameTarget(null); if (id) window.setTimeout(() => renameButtonRefs.current[id]?.focus(), 0) }
 
     const handleGenerateReport = async () => {
         if (loading) return
@@ -198,20 +237,23 @@ const Home = () => {
             </div>
 
             {/* Recent Reports List */}
-            {reports.length > 0 && (
+            {(historyError || reportsError) && <p className='history-error' role='alert'>{historyError || reportsError}</p>}
+            {reports.length > 0 ? (
                 <section className='recent-reports'>
                     <h2>Your Recent Resume Analyses</h2>
                     <ul className='reports-list'>
                         {reports.map(report => (
-                            <li key={report._id} className='report-item' onClick={() => navigate(`/interview/${report._id}`)}>
-                                <h3>{report.title || 'Untitled Position'}</h3>
-                                <p className='report-meta'>Generated on {new Date(report.createdAt).toLocaleDateString()}</p>
-                                <p className={`match-score ${report.matchScore >= 80 ? 'score--high' : report.matchScore >= 60 ? 'score--mid' : 'score--low'}`}>Match Score: {report.matchScore}%</p>
+                            <li key={report._id} className={`report-item${report.isPinned ? ' report-item--pinned' : ''}`}>
+                                <button className='report-card-open' type='button' onClick={() => navigate(`/interview/${report._id}`)}><h3>{report.title || 'Untitled Position'}</h3><p className='report-meta'>{report.isPinned ? 'Pinned' : 'Recent'} · {new Date(report.createdAt).toLocaleDateString()}</p><p className={`match-score ${report.matchScore >= 80 ? 'score--high' : report.matchScore >= 60 ? 'score--mid' : 'score--low'}`}>Match Score: {report.matchScore}%</p></button>
+                                <button ref={element => { renameButtonRefs.current[report._id] = element }} className='report-menu-button' type='button' aria-label={`Actions for ${report.title || 'report'}`} aria-expanded={openMenu === report._id} disabled={pendingAction === report._id} onClick={(event) => { event.stopPropagation(); setOpenMenu(openMenu === report._id ? null : report._id) }}>⋯</button>
+                                {openMenu === report._id && <div className='report-menu' role='menu' onClick={event => event.stopPropagation()}><button type='button' role='menuitem' onClick={() => { setRenameTarget(report); setRenameValue(report.title || ''); setOpenMenu(null) }}>Rename</button><button type='button' role='menuitem' onClick={() => runHistoryAction(report._id, () => pinReport(report._id, !report.isPinned))}>{report.isPinned ? 'Unpin' : 'Pin'}</button><button type='button' role='menuitem' onClick={() => { if (window.confirm(`Delete “${report.title || 'Untitled Position'}”?`)) runHistoryAction(report._id, () => removeReport(report._id)) }}>Delete</button></div>}
                             </li>
                         ))}
                     </ul>
                 </section>
-            )}
+            ) : <section className='recent-reports recent-reports--empty'><h2>Your Recent Resume Analyses</h2><p>No resume analyses yet.</p></section>}
+
+            {renameTarget && <div className='rename-modal-backdrop' role='presentation' onMouseDown={closeRename}><form className='rename-modal' role='dialog' aria-modal='true' aria-labelledby='rename-report-title' onSubmit={submitRename} onMouseDown={event => event.stopPropagation()}><h2 id='rename-report-title'>Rename report</h2><input value={renameValue} maxLength={160} autoFocus onChange={event => setRenameValue(event.target.value)} aria-label='Report title' /><p>{renameValue.trim().length > 160 ? 'Titles must be 160 characters or fewer.' : !renameValue.trim() ? 'Enter a report title.' : ''}</p><div><button type='button' onClick={closeRename}>Cancel</button><button type='submit' disabled={!renameValue.trim() || renameValue.trim().length > 160 || pendingAction === renameTarget._id}>Save</button></div></form></div>}
 
             {/* Page Footer */}
             <footer className='page-footer'>

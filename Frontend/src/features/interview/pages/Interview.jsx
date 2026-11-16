@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import { useInterview } from '../hooks/useInterview'
 import { adaptInterviewReport } from '../report.adapter'
 import '../style/interview.scss'
@@ -121,7 +121,7 @@ function ScoreSidebar({ report, isDirty, saving, saveError, saveSuccess, onSave 
 
 export default function Interview() {
     const { interviewId } = useParams()
-    const { report: rawReport, loading, getResumePdf, saveConfirmedSkills } = useInterview()
+    const { report: rawReport, loading, getResumePdf, saveConfirmedSkills, removeReport } = useInterview()
     const report = useMemo(() => adaptInterviewReport(rawReport), [rawReport])
     const [activeSection, setActiveSection] = useState('summary')
     const [selectedSkills, setSelectedSkills] = useState(new Set())
@@ -131,12 +131,37 @@ export default function Interview() {
     const resumeGenerationLock = useRef(false)
     const [saveError, setSaveError] = useState('')
     const [saveSuccess, setSaveSuccess] = useState(false)
+    const [reportMenuOpen, setReportMenuOpen] = useState(false)
+    const [deletingReport, setDeletingReport] = useState(false)
+    const [deleteError, setDeleteError] = useState('')
+    const reportMenuRef = useRef(null)
+    const reportMenuButtonRef = useRef(null)
+    const navigate = useNavigate()
     const savedSkills = useMemo(() => new Set(report?.confirmedSkills.map(skill => skill.normalizedName.toLowerCase()) || []), [report])
     useEffect(() => {
         if (report) setSelectedSkills(new Set(report.confirmedSkills.map(skill => skill.normalizedName.toLowerCase())))
         setSaveError('')
         setSaveSuccess(false)
     }, [report])
+    useEffect(() => {
+        if (!reportMenuOpen) return undefined
+        const menuItems = () => reportMenuRef.current ? [...reportMenuRef.current.querySelectorAll('[role="menuitem"]')].filter(item => !item.disabled) : []
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') { setReportMenuOpen(false); reportMenuButtonRef.current?.focus(); return }
+            if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                const items = menuItems()
+                if (!items.length) return
+                const current = items.indexOf(document.activeElement)
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length
+                event.preventDefault()
+                items[next].focus()
+                return
+            }
+        }
+        document.addEventListener('keydown', onKeyDown)
+        menuItems()[0]?.focus()
+        return () => document.removeEventListener('keydown', onKeyDown)
+    }, [reportMenuOpen])
     if (!report) return <main className='loading-screen'><h1>Loading your resume analysis...</h1></main>
     const requirementsByCategory = (category) => report.requirements.filter((item) => item.scoringCategory === category || item.category === category)
     const isDirty = selectedSkills.size !== savedSkills.size || Array.from(selectedSkills).some(skill => !savedSkills.has(skill))
@@ -144,6 +169,11 @@ export default function Interview() {
     const saveSkills = async () => {
         setSavingSkills(true); setSaveError(''); setSaveSuccess(false)
         try { await saveConfirmedSkills(interviewId, Array.from(selectedSkills)); setSaveSuccess(true) } catch { setSaveError('Unable to save changes. Please try again.') } finally { setSavingSkills(false) }
+    }
+    const deleteCurrentReport = async () => {
+        if (deletingReport) return
+        setDeletingReport(true); setDeleteError('')
+        try { await removeReport(interviewId); navigate('/') } catch { setDeleteError('Unable to delete this report. Please try again.') } finally { setDeletingReport(false) }
     }
     const downloadIdealResume = async () => {
         if (resumeGenerationLock.current) return
@@ -163,7 +193,7 @@ export default function Interview() {
     return <main className='interview-page' aria-busy={loading}><div className='interview-layout'>
         <nav className='interview-nav' aria-label='Resume analysis sections'><div><div className='nav-heading'><span className='nav-heading__title'>Resume Analysis</span></div><div className='nav-items'>{NAV_ITEMS.map(([id, label]) => <button className={'interview-nav__item' + (activeSection === id ? ' interview-nav__item--active' : '')} key={id} type='button' onClick={() => setActiveSection(id)}><span>{label}</span></button>)}</div></div><div className='nav-actions'><button className='button primary-button' type='button' disabled={generatingResume} onClick={downloadIdealResume}>{generatingResume && <span className='button-spinner' aria-hidden='true' />}{generatingResume ? 'Generating…' : 'Download Ideal Resume'}</button>{generatingResume && <p className='download-status' role='status'>Generating your Ideal Resume. This usually takes a few seconds.</p>}{resumeDownloadError && <p className='download-status download-status--error' role='alert'>{resumeDownloadError}</p>}</div></nav>
         <div className='interview-divider' />
-        <section className='interview-content'><header className='content-header'><div><p className='eyebrow'>Candidate report</p><h1>{NAV_ITEMS.find(([id]) => id === activeSection)?.[1]}</h1></div><span className='content-header__status'>{report.analysisVersion || 'Legacy report'}</span></header>{section}</section>
+        <section className='interview-content'><header className='content-header'><div><p className='eyebrow'>Candidate report</p><h1>{NAV_ITEMS.find(([id]) => id === activeSection)?.[1]}</h1></div><div className='report-header-actions'><span className='content-header__status'>{report.analysisVersion || 'Legacy report'}</span><button ref={reportMenuButtonRef} className='report-menu-button' type='button' aria-label='Report actions' aria-expanded={reportMenuOpen} onClick={() => setReportMenuOpen(open => !open)}>⋯</button>{reportMenuOpen && <div ref={reportMenuRef} className='report-menu report-menu--header' role='menu'><button type='button' role='menuitem' disabled={deletingReport} onClick={() => { if (window.confirm(`Delete “${report.title || 'Untitled Position'}”?`)) deleteCurrentReport() }}>Delete</button></div>}{deleteError && <p className='download-status download-status--error' role='alert'>{deleteError}</p>}</div></header>{section}</section>
         <div className='interview-divider' /><ScoreSidebar report={report} isDirty={isDirty} saving={savingSkills} saveError={saveError} saveSuccess={saveSuccess} onSave={saveSkills} />
     </div></main>
 }

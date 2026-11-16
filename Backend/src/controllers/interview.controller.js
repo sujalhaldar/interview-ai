@@ -119,7 +119,12 @@ async function getInterviewReportByIdController(req, res) {
 
     const { interviewId } = req.params
 
-    const interviewReport = await interviewReportModel.findOne({ _id: interviewId, user: req.user.id })
+    if (!mongoose.Types.ObjectId.isValid(interviewId)) return res.status(404).json({ message: "Interview report not found." })
+    const interviewReport = await interviewReportModel.findOneAndUpdate(
+        { _id: interviewId, user: req.user.id },
+        { $set: { lastOpenedAt: new Date() } },
+        { new: true, runValidators: true }
+    )
 
     if (!interviewReport) {
         return res.status(404).json({
@@ -138,7 +143,16 @@ async function getInterviewReportByIdController(req, res) {
  * @description Controller to get all interview reports of logged in user.
  */
 async function getAllInterviewReportsController(req, res) {
-    const interviewReports = await interviewReportModel.find({ user: req.user.id }).sort({ createdAt: -1 }).select("-resume -selfDescription -jobDescription -__v -technicalQuestions -behavioralQuestions -skillGaps -preparationPlan")
+    const user = mongoose.Types.ObjectId.isValid(req.user.id) ? new mongoose.Types.ObjectId(req.user.id) : req.user.id
+    const interviewReports = await interviewReportModel.aggregate([
+        { $match: { user } },
+        { $addFields: {
+            historyPinned: { $cond: [ { $eq: [ "$isPinned", true ] }, 0, 1 ] },
+            historyDate: { $cond: [ { $eq: [ "$isPinned", true ] }, "$pinnedAt", { $ifNull: [ "$lastOpenedAt", "$createdAt" ] } ] }
+        } },
+        { $sort: { historyPinned: 1, historyDate: -1, createdAt: -1, _id: -1 } },
+        { $project: { resume: 0, selfDescription: 0, jobDescription: 0, __v: 0, technicalQuestions: 0, behavioralQuestions: 0, skillGaps: 0, preparationPlan: 0, historyPinned: 0, historyDate: 0 } }
+    ])
 
     res.status(200).json({
         message: "Interview reports fetched successfully.",
@@ -185,6 +199,14 @@ async function updateReportPinController(req, res) {
         if (!report) return res.status(404).json({ message: "Interview report not found." })
     }
     return res.status(200).json({ message: isPinned ? "Interview report pinned successfully." : "Interview report unpinned successfully.", interviewReport: report })
+}
+
+async function deleteInterviewReportController(req, res) {
+    const { interviewId } = req.params
+    if (!mongoose.Types.ObjectId.isValid(interviewId)) return res.status(404).json({ message: "Interview report not found." })
+    const deleted = await interviewReportModel.findOneAndDelete({ _id: interviewId, user: req.user.id })
+    if (!deleted) return res.status(404).json({ message: "Interview report not found." })
+    return res.status(200).json({ message: "Interview report deleted successfully.", interviewReportId: interviewId })
 }
 
 
@@ -298,4 +320,4 @@ async function updateConfirmedSkillsController(req, res) {
     }
 }
 
-module.exports = { generateInterViewReportController, getInterviewReportByIdController, getAllInterviewReportsController, updateReportTitleController, updateReportPinController, generateResumePdfController, updateConfirmedSkillsController, normalizeConfirmedSkills, addConfirmedEvidence }
+module.exports = { generateInterViewReportController, getInterviewReportByIdController, getAllInterviewReportsController, updateReportTitleController, updateReportPinController, deleteInterviewReportController, generateResumePdfController, updateConfirmedSkillsController, normalizeConfirmedSkills, addConfirmedEvidence }

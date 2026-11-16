@@ -35,3 +35,6 @@ export const getInterviewReportById = async (interviewId) => (await api.get(`/ap
 export const getAllInterviewReports = async () => (await api.get("/api/interview/")).data
 export const generateResumePdf = async ({ interviewReportId }) => (await api.post(`/api/interview/resume/pdf/${interviewReportId}`, null, { responseType: "blob" })).data
 export const updateConfirmedSkills = async ({ interviewReportId, skills }) => (await api.patch("/api/interview/report/" + interviewReportId + "/confirmed-skills", { skills })).data
+export const updateReportTitle = async ({ interviewReportId, title }) => (await api.patch(`/api/interview/report/${interviewReportId}/title`, { title })).data
+export const updateReportPin = async ({ interviewReportId, isPinned }) => (await api.patch(`/api/interview/report/${interviewReportId}/pin`, { isPinned })).data
+export const deleteInterviewReport = async (interviewReportId) => (await api.delete(`/api/interview/report/${interviewReportId}`)).data
