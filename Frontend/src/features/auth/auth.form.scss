@@ -15,6 +15,10 @@ main{
         gap: 1rem;
     }
 
+    .auth-container{ width: min(100% - 2rem, 440px); padding: 2rem; border: 1px solid #1f2937; border-radius: 1rem; background: #111827; box-sizing: border-box; }
+    .google-signin{ min-height: 40px; display: flex; justify-content: center; }
+    .auth-divider{ color: #94a3b8; font-size: .85rem; text-align: center; }
+
     form{
         display: flex;
         flex-direction: column;

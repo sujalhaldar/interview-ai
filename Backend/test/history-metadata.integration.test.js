@@ -13,6 +13,7 @@ const owner = new mongoose.Types.ObjectId()
 const other = new mongoose.Types.ObjectId()
 let server
 function cookie(user) { return `token=${jwt.sign({ id: user.toString() }, process.env.JWT_SECRET)}` }
+function auth(requestBuilder, user) { return requestBuilder.set("Cookie", [cookie(user)]).set("X-Expected-User-Id", user.toString()) }
 async function create(data = {}) { return report.create({ user: owner, jobDescription: "Role", title: "Role", analysisVersion: "2.0", ...data }) }
 test.before(async () => { server = await MongoMemoryServer.create({ instance: { dbName: `history-${Date.now()}` } }); await mongoose.connect(server.getUri()); await report.init(); blacklist.findOne = async () => null })
 test.after(async () => { await mongoose.disconnect(); await server.stop() })
@@ -25,7 +26,7 @@ test("history sorts pinned first, then by the effective unpinned open date", asy
     const unpinnedNew = await create({ title: "Unpinned new", lastOpenedAt: new Date("2026-02-10"), createdAt: new Date("2026-01-01") })
     await create({ title: "Historical", createdAt: new Date("2026-04-01") })
     await report.create({ user: other, jobDescription: "Other", title: "Other", analysisVersion: "2.0" })
-    const response = await request(app).get("/api/interview/").set("Cookie", [cookie(owner)])
+    const response = await auth(request(app).get("/api/interview/"), owner)
     assert.equal(response.status, 200)
     assert.deepEqual(response.body.interviewReports.map(item => item.title), [pinnedNew.title, pinnedOld.title, "Historical", unpinnedNew.title, unpinnedOld.title])
     assert.equal(response.body.interviewReports.some(item => item.jobDescription), false)
@@ -41,7 +42,7 @@ test("sorts genuinely legacy documents with deterministic date and ID tie-breake
         { _id: ids[4], user: owner, title: "Legacy fallback", jobDescription: "private", createdAt: new Date("2026-06-01"), updatedAt: new Date("2026-06-01") }
     ])
     await report.collection.insertOne({ _id: new mongoose.Types.ObjectId("000000000000000000000006"), user: owner, title: "Explicit null fallback", jobDescription: "private", isPinned: false, lastOpenedAt: null, createdAt: new Date("2026-05-15"), updatedAt: new Date("2026-05-15") })
-    const response = await request(app).get("/api/interview/").set("Cookie", [cookie(owner)])
+    const response = await auth(request(app).get("/api/interview/"), owner)
     assert.equal(response.status, 200)
     assert.deepEqual(response.body.interviewReports.map(item => item.title), ["Pinned newer", "Pinned older", "Legacy fallback", "Explicit null fallback", "Equal date higher ID", "Equal date lower ID"])
     for (const item of response.body.interviewReports) {
@@ -57,7 +58,7 @@ test("history response is owner-scoped and excludes every sensitive field", asyn
         skillGaps: [{ skill: "Docker", severity: "high" }], preparationPlan: [{ day: 1, focus: "Focus", tasks: ["Task"] }], createdAt: new Date(), updatedAt: new Date()
     })
     await report.collection.insertOne({ _id: new mongoose.Types.ObjectId(), user: other, title: "Other user", jobDescription: "private", createdAt: new Date(), updatedAt: new Date() })
-    const response = await request(app).get("/api/interview/").set("Cookie", [cookie(owner)])
+    const response = await auth(request(app).get("/api/interview/"), owner)
     assert.equal(response.status, 200)
     assert.deepEqual(response.body.interviewReports.map(item => item.title), ["Safe summary"])
     const [item] = response.body.interviewReports
@@ -70,19 +71,19 @@ test("report retrieval updates only lastOpenedAt after ownership verification", 
     const lastOpenedAt = new Date("2026-01-03")
     const created = await create({ isPinned: true, pinnedAt, lastOpenedAt, createdAt, matchScore: 80, analysisRevision: 2 })
     const before = await report.findById(created._id).lean()
-    const response = await request(app).get(`/api/interview/report/${created._id}`).set("Cookie", [cookie(owner)])
+    const response = await auth(request(app).get(`/api/interview/report/${created._id}`), owner)
     assert.equal(response.status, 200)
     const after = await report.findById(created._id).lean()
     assert.ok(after.lastOpenedAt >= before.lastOpenedAt)
     const firstOpenedAt = after.lastOpenedAt
     await new Promise(resolve => setTimeout(resolve, 5))
-    assert.equal((await request(app).get(`/api/interview/report/${created._id}`).set("Cookie", [cookie(owner)])).status, 200)
+    assert.equal((await auth(request(app).get(`/api/interview/report/${created._id}`), owner)).status, 200)
     const afterSecondOpen = await report.findById(created._id).lean()
     assert.ok(afterSecondOpen.lastOpenedAt > firstOpenedAt)
     assert.deepEqual({ isPinned: afterSecondOpen.isPinned, pinnedAt: afterSecondOpen.pinnedAt, createdAt: afterSecondOpen.createdAt, matchScore: afterSecondOpen.matchScore, analysisRevision: afterSecondOpen.analysisRevision }, { isPinned: true, pinnedAt: before.pinnedAt, createdAt: before.createdAt, matchScore: 80, analysisRevision: 2 })
     assert.deepEqual(afterSecondOpen.confirmedSkills, before.confirmedSkills)
-    assert.equal((await request(app).get(`/api/interview/report/${created._id}`).set("Cookie", [cookie(other)])).status, 404)
-    assert.equal((await request(app).get(`/api/interview/report/${new mongoose.Types.ObjectId()}`).set("Cookie", [cookie(owner)])).status, 404)
-    assert.equal((await request(app).get("/api/interview/report/bad-id").set("Cookie", [cookie(owner)])).status, 404)
+    assert.equal((await auth(request(app).get(`/api/interview/report/${created._id}`), other)).status, 404)
+    assert.equal((await auth(request(app).get(`/api/interview/report/${new mongoose.Types.ObjectId()}`), owner)).status, 404)
+    assert.equal((await auth(request(app).get("/api/interview/report/bad-id"), owner)).status, 404)
     assert.equal((await request(app).get(`/api/interview/report/${created._id}`)).status, 401)
 })

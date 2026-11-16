@@ -8,8 +8,7 @@ This implementation is based on the learning reference and original Interview AI
 
 ### Authentication
 
-- Register with a username, email, and password.
-- Log in and log out using an HTTP cookie containing the JWT.
+- Sign in with Google and log out using an HTTP cookie containing the JWT.
 - Protected application routes redirect unauthenticated users to `/login`.
 
 ### Interview planning
@@ -31,7 +30,7 @@ From an interview report, the application can request a tailored résumé from G
 - Backend: Node.js, Express, Mongoose, Multer, `pdf-parse`, Puppeteer
 - Database: MongoDB
 - AI: Google Gemini through `@google/genai`
-- Authentication: JWT cookies with bcryptjs password hashing
+- Authentication: Google Identity Services with JWT cookies
 
 ## Architecture
 

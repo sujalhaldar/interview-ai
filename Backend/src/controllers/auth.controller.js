@@ -1,104 +1,48 @@
 const userModel = require("../models/user.model")
-const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const tokenBlacklistModel = require("../models/blacklist.model")
+const googleAuthService = require("../services/google-auth.service")
 
-/**
- * @name registerUserController
- * @description register a new user, expects username, email and password in the request body
- * @access Public
- */
-async function registerUserController(req, res) {
-
-    const { username, email, password } = req.body
-
-    if (!username || !email || !password) {
-        return res.status(400).json({
-            message: "Please provide username, email and password"
-        })
-    }
-
-    const isUserAlreadyExists = await userModel.findOne({
-        $or: [ { username }, { email } ]
-    })
-
-    if (isUserAlreadyExists) {
-        return res.status(400).json({
-            message: "Account already exists with this email address or username"
-        })
-    }
-
-    const hash = await bcrypt.hash(password, 10)
-
-    const user = await userModel.create({
-        username,
-        email,
-        password: hash
-    })
-
-    const token = jwt.sign(
-        { id: user._id, username: user.username },
-        process.env.JWT_SECRET,
-        { expiresIn: "1d" }
-    )
-
-    res.cookie("token", token)
-
-
-    res.status(201).json({
-        message: "User registered successfully",
-        user: {
-            id: user._id,
-            username: user.username,
-            email: user.email
-        }
-    })
-
+function authenticatedUserResponse(user) {
+    return { id: user._id, username: user.username, email: user.email }
 }
 
+function issueApplicationSession(res, user) {
+    const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: "1d" })
+    res.cookie("token", token)
+}
 
-/**
- * @name loginUserController
- * @description login a user, expects email and password in the request body
- * @access Public
- */
-async function loginUserController(req, res) {
+async function googleUserController(req, res) {
+    const idToken = req.body?.idToken
+    if (typeof idToken !== "string" || !idToken.trim()) return res.status(400).json({ message: "Google authentication token is required." })
 
-    const { email, password } = req.body
+    let googleIdentity
+    try {
+        googleIdentity = await googleAuthService.verifyGoogleIdToken(idToken)
+    } catch {
+        return res.status(401).json({ message: "Google authentication failed." })
+    }
 
-    const user = await userModel.findOne({ email })
-
+    const email = googleIdentity.email.trim().toLowerCase()
+    let user = await userModel.findOne({ googleSub: googleIdentity.sub })
     if (!user) {
-        return res.status(400).json({
-            message: "Invalid email or password"
-        })
-    }
+        const emailOwner = await userModel.findOne({ email })
+        if (emailOwner && !emailOwner.googleSub) return res.status(409).json({ message: "This email is already linked to an existing account." })
+        if (emailOwner && emailOwner.googleSub !== googleIdentity.sub) return res.status(409).json({ message: "This Google account is linked to a different account." })
 
-    const isPasswordValid = await bcrypt.compare(password, user.password)
-
-    if (!isPasswordValid) {
-        return res.status(400).json({
-            message: "Invalid email or password"
-        })
-    }
-
-    const token = jwt.sign(
-        { id: user._id, username: user.username },
-        process.env.JWT_SECRET,
-        { expiresIn: "1d" }
-    )
-
-    res.cookie("token", token)
-    res.status(200).json({
-        message: "User loggedIn successfully.",
-        user: {
-            id: user._id,
-            username: user.username,
-            email: user.email
+        const baseUsername = (googleIdentity.name || email.split("@")[0] || "google-user").trim().replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "google-user"
+        try {
+            user = await userModel.create({ username: `${baseUsername}-${googleIdentity.sub.slice(-8)}`, email, googleSub: googleIdentity.sub, profilePicture: googleIdentity.picture })
+        } catch (error) {
+            const concurrentUser = await userModel.findOne({ googleSub: googleIdentity.sub })
+            if (!concurrentUser) throw error
+            user = concurrentUser
         }
-    })
-}
+    }
 
+    issueApplicationSession(res, user)
+    return res.status(200).json({ message: "Google authentication successful.", user: authenticatedUserResponse(user) })
+}
 
 /**
  * @name logoutUserController
@@ -144,8 +88,7 @@ async function getMeController(req, res) {
 
 
 module.exports = {
-    registerUserController,
-    loginUserController,
     logoutUserController,
-    getMeController
+    getMeController,
+    googleUserController
 }

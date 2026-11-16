@@ -33,6 +33,7 @@ function authenticatedRequest(userId, reportId) {
     return request(app)
         .post(`/api/interview/resume/pdf/${reportId}`)
         .set("Cookie", [`token=${tokenFor(userId)}`])
+        .set("X-Expected-User-Id", userId)
 }
 
 beforeEach(() => {

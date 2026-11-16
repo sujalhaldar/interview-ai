@@ -94,6 +94,7 @@ test("authenticated report generation persists validated analysis and backend sc
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .field("jobDescription", "React role")
         .field("selfDescription", "Frontend developer")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
@@ -114,6 +115,7 @@ test("persists an explicitly labeled JD title without an additional Gemini call"
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .field("jobDescription", "Position: Senior Platform Engineer")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
@@ -130,6 +132,7 @@ test("invalid Gemini JSON returns 502 and does not persist", async () => {
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .field("jobDescription", "React role")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
@@ -146,6 +149,7 @@ test("Zod validation failure returns 502 and does not persist", async () => {
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .field("jobDescription", "React role")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
@@ -161,6 +165,7 @@ test("Gemini rejection returns 502 and does not persist", async () => {
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .field("jobDescription", "React role")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
@@ -180,6 +185,7 @@ test("rejects a missing job description before invoking Gemini", async () => {
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
     assert.equal(response.status, 400)
@@ -191,6 +197,7 @@ test("rejects a missing resume PDF before invoking Gemini", async () => {
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .field("jobDescription", "React role")
         .field("selfDescription", "Frontend developer")
 
@@ -203,6 +210,7 @@ test("does not allow self-description-only submissions", async () => {
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .field("jobDescription", "React role")
         .field("selfDescription", "Frontend developer")
 
@@ -218,8 +226,9 @@ test("each downstream pipeline failure stops execution and persistence", async (
         interviewReportModel.create = async () => { createCalled = true }
         const response = await request(app)
             .post("/api/interview/")
-            .set("Cookie", [ authCookie() ])
-            .field("jobDescription", "React role")
+        .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
+        .field("jobDescription", "React role")
             .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
         assert.equal(response.status, 502)
         assert.deepEqual(response.body, { message: "Resume analysis service is temporarily unavailable." })
@@ -242,6 +251,7 @@ test("PDF extraction failure is sanitized and prevents all later stages", async 
     const response = await request(app)
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
+        .set("X-Expected-User-Id", USER_ID)
         .field("jobDescription", "React role")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
     assert.equal(response.status, 400)

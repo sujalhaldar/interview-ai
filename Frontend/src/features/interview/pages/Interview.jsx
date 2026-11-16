@@ -158,9 +158,13 @@ export default function Interview() {
                 return
             }
         }
+        const onPointerDown = (event) => {
+            if (!reportMenuRef.current?.contains(event.target) && !reportMenuButtonRef.current?.contains(event.target)) setReportMenuOpen(false)
+        }
         document.addEventListener('keydown', onKeyDown)
+        document.addEventListener('pointerdown', onPointerDown)
         menuItems()[0]?.focus()
-        return () => document.removeEventListener('keydown', onKeyDown)
+        return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('pointerdown', onPointerDown) }
     }, [reportMenuOpen])
     if (!report) return <main className='loading-screen'><h1>Loading your resume analysis...</h1></main>
     const requirementsByCategory = (category) => report.requirements.filter((item) => item.scoringCategory === category || item.category === category)

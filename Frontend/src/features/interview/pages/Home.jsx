@@ -2,10 +2,12 @@ import React, { useEffect, useState, useRef } from 'react'
 import "../style/home.scss"
 import { useInterview } from '../hooks/useInterview.js'
 import { useNavigate } from 'react-router'
+import { useAuth } from '../../auth/hooks/useAuth'
 
 const Home = () => {
 
-    const { loading, analysisProgress, generateReport, reports, reportsError, renameReport, pinReport, removeReport } = useInterview()
+    const { analysisLoading, historyLoading, analysisProgress, generateReport, reports, reportsError, renameReport, pinReport, removeReport } = useInterview()
+    const { user, handleLogout } = useAuth()
     const [ jobDescription, setJobDescription ] = useState("")
     const [ selfDescription, setSelfDescription ] = useState("")
     const [ resumeFile, setResumeFile ] = useState(null)
@@ -18,9 +20,22 @@ const Home = () => {
     const [renameValue, setRenameValue] = useState('')
     const [historyError, setHistoryError] = useState('')
     const [pendingAction, setPendingAction] = useState(null)
+    const [logoutPending, setLogoutPending] = useState(false)
+    const [logoutError, setLogoutError] = useState('')
     const renameButtonRefs = useRef({})
+    const reportMenuRefs = useRef({})
 
     const navigate = useNavigate()
+
+    const submitLogout = async () => {
+        if (logoutPending) return
+        setLogoutPending(true)
+        setLogoutError('')
+        const result = await handleLogout()
+        if (result?.success) navigate('/login', { replace: true })
+        else setLogoutError('Unable to sign out. Please try again.')
+        setLogoutPending(false)
+    }
 
     useEffect(() => {
         if (!renameTarget) return undefined
@@ -40,6 +55,17 @@ const Home = () => {
         return () => document.removeEventListener('keydown', onKeyDown)
     }, [renameTarget])
 
+    useEffect(() => {
+        if (!openMenu) return undefined
+        const onPointerDown = (event) => {
+            const menu = reportMenuRefs.current[openMenu]
+            const trigger = renameButtonRefs.current[openMenu]
+            if (!menu?.contains(event.target) && !trigger?.contains(event.target)) setOpenMenu(null)
+        }
+        document.addEventListener('pointerdown', onPointerDown)
+        return () => document.removeEventListener('pointerdown', onPointerDown)
+    }, [openMenu])
+
     const runHistoryAction = async (key, action) => {
         setPendingAction(key)
         setHistoryError('')
@@ -56,7 +82,7 @@ const Home = () => {
     const closeRename = () => { const id = renameTarget?._id; setRenameTarget(null); if (id) window.setTimeout(() => renameButtonRefs.current[id]?.focus(), 0) }
 
     const handleGenerateReport = async () => {
-        if (loading) return
+        if (analysisLoading) return
 
         setGenerationError('')
         setFieldErrors({ jobDescription: '', resume: '' })
@@ -91,7 +117,7 @@ const Home = () => {
         }
     }
 
-    if (loading) {
+    if (analysisLoading) {
         return (
             <main className='loading-screen'>
                 <h1>Finding the story in your experience.</h1>
@@ -114,9 +140,16 @@ const Home = () => {
 
             {/* Page Header */}
             <header className='page-header'>
+                <div className='account-bar'>
+                    <span className='account-name'>{user?.username || user?.email}</span>
+                    <button type='button' className='logout-button' onClick={submitLogout} disabled={logoutPending}>
+                        {logoutPending ? 'Signing out…' : 'Logout'}
+                    </button>
+                </div>
                 <h1>Give Your <span className='highlight'>Potential</span> a Place.</h1>
                 <p>Discover your strengths, understand your opportunities, and shape your resume for what comes next.</p>
             </header>
+            {logoutError && <p className='submission-error' role='alert'>{logoutError}</p>}
 
             {/* Main Card */}
             <div className='interview-card'>
@@ -228,7 +261,7 @@ const Home = () => {
                     <span className='footer-info'>Resume Analysis &amp; Tailored Resume Generation</span>
                     <button
                         onClick={handleGenerateReport}
-                        disabled={loading}
+                        disabled={analysisLoading}
                         className='generate-btn'>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" /></svg>
                         Analyze My Resume
@@ -238,7 +271,9 @@ const Home = () => {
 
             {/* Recent Reports List */}
             {(historyError || reportsError) && <p className='history-error' role='alert'>{historyError || reportsError}</p>}
-            {reports.length > 0 ? (
+            {historyLoading ? (
+                <section className='recent-reports' aria-busy='true'><h2>Your Recent Resume Analyses</h2><p role='status'>Loading recent analyses...</p></section>
+            ) : reports.length > 0 ? (
                 <section className='recent-reports'>
                     <h2>Your Recent Resume Analyses</h2>
                     <ul className='reports-list'>
@@ -246,7 +281,7 @@ const Home = () => {
                             <li key={report._id} className={`report-item${report.isPinned ? ' report-item--pinned' : ''}`}>
                                 <button className='report-card-open' type='button' onClick={() => navigate(`/interview/${report._id}`)}><h3>{report.title || 'Untitled Position'}</h3><p className='report-meta'>{report.isPinned ? 'Pinned' : 'Recent'} · {new Date(report.createdAt).toLocaleDateString()}</p><p className={`match-score ${report.matchScore >= 80 ? 'score--high' : report.matchScore >= 60 ? 'score--mid' : 'score--low'}`}>Match Score: {report.matchScore}%</p></button>
                                 <button ref={element => { renameButtonRefs.current[report._id] = element }} className='report-menu-button' type='button' aria-label={`Actions for ${report.title || 'report'}`} aria-expanded={openMenu === report._id} disabled={pendingAction === report._id} onClick={(event) => { event.stopPropagation(); setOpenMenu(openMenu === report._id ? null : report._id) }}>⋯</button>
-                                {openMenu === report._id && <div className='report-menu' role='menu' onClick={event => event.stopPropagation()}><button type='button' role='menuitem' onClick={() => { setRenameTarget(report); setRenameValue(report.title || ''); setOpenMenu(null) }}>Rename</button><button type='button' role='menuitem' onClick={() => runHistoryAction(report._id, () => pinReport(report._id, !report.isPinned))}>{report.isPinned ? 'Unpin' : 'Pin'}</button><button type='button' role='menuitem' onClick={() => { if (window.confirm(`Delete “${report.title || 'Untitled Position'}”?`)) runHistoryAction(report._id, () => removeReport(report._id)) }}>Delete</button></div>}
+                                {openMenu === report._id && <div ref={element => { reportMenuRefs.current[report._id] = element }} className='report-menu' role='menu' onClick={event => event.stopPropagation()}><button type='button' role='menuitem' onClick={() => { setRenameTarget(report); setRenameValue(report.title || ''); setOpenMenu(null) }}>Rename</button><button type='button' role='menuitem' onClick={() => runHistoryAction(report._id, () => pinReport(report._id, !report.isPinned))}>{report.isPinned ? 'Unpin' : 'Pin'}</button><button type='button' role='menuitem' onClick={() => { if (window.confirm(`Delete “${report.title || 'Untitled Position'}”?`)) runHistoryAction(report._id, () => removeReport(report._id)) }}>Delete</button></div>}
                             </li>
                         ))}
                     </ul>

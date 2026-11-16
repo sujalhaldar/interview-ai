@@ -23,6 +23,9 @@ const report = { _id: "report-id", user: USER_ID, jobDescription: "Required: Doc
 function cookie(userId = USER_ID) {
     return "token=" + jwt.sign({ id: userId }, TEST_SECRET)
 }
+function auth(requestBuilder, userId = USER_ID) {
+    return requestBuilder.set("Cookie", [cookie(userId)]).set("X-Expected-User-Id", userId)
+}
 
 beforeEach(() => {
     tokenBlacklistModel.findOne = async () => null
@@ -48,7 +51,7 @@ test("saves normalized confirmed skills and recalculates without Gemini or PDF g
     aiService.generateResumePdf = async () => { pdfCalls += 1 }
     interviewReportModel.findOneAndUpdate = async (query, value) => { update = value; return { ...report, ...value.$set } }
 
-    const response = await request(app).patch("/api/interview/report/report-id/confirmed-skills").set("Cookie", [cookie()]).send({ skills: ["JS", "Docker", "Docker"] })
+    const response = await auth(request(app).patch("/api/interview/report/report-id/confirmed-skills")).send({ skills: ["JS", "Docker", "Docker"] })
     assert.equal(response.status, 200)
     assert.deepEqual(update.$set.confirmedSkills.map(skill => skill.normalizedName), ["JavaScript", "Docker"])
     assert.equal(update.$set.analysisRevision, 1)
@@ -65,14 +68,14 @@ test("requires authentication and validates the ownership query", async () => {
     assert.equal(unauthenticated.status, 401)
     let query
     interviewReportModel.findOne = async value => { query = value; return null }
-    const response = await request(app).patch("/api/interview/report/report-id/confirmed-skills").set("Cookie", [cookie()]).send({ skills: ["Docker"] })
+    const response = await auth(request(app).patch("/api/interview/report/report-id/confirmed-skills")).send({ skills: ["Docker"] })
     assert.equal(response.status, 404)
     assert.equal(query._id, "report-id")
     assert.equal(query.user, USER_ID)
 })
 
 test("rejects malformed confirmed skill input", async () => {
-    const response = await request(app).patch("/api/interview/report/report-id/confirmed-skills").set("Cookie", [cookie()]).send({ skills: "Docker" })
+    const response = await auth(request(app).patch("/api/interview/report/report-id/confirmed-skills")).send({ skills: "Docker" })
     assert.equal(response.status, 400)
     assert.match(response.body.message, /array/)
 })

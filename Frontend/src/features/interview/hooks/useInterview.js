@@ -13,59 +13,75 @@ export const useInterview = () => {
         throw new Error("useInterview must be used within an InterviewProvider")
     }
 
-    const { loading, setLoading, analysisProgress, setAnalysisProgress, report, setReport, reports, setReports, reportsError, setReportsError } = context
+    const { loading, setLoading, analysisLoading, setAnalysisLoading, historyLoading, setHistoryLoading, analysisProgress, setAnalysisProgress, report, setReport, reports, setReports, reportsError, setReportsError, user, sessionGeneration } = context
     const historyRequestGeneration = useRef(0)
+    const detailRequestGeneration = useRef(0)
     const historyRefreshError = useRef(null)
+    const identityRef = useRef({ userId: user?.id || null, sessionGeneration })
+    if (identityRef.current.userId !== (user?.id || null) || identityRef.current.sessionGeneration !== sessionGeneration) {
+        identityRef.current = { userId: user?.id || null, sessionGeneration }
+    }
+    useEffect(() => {
+        identityRef.current = { userId: user?.id || null, sessionGeneration }
+        historyRequestGeneration.current += 1
+    }, [ user?.id, sessionGeneration ])
 
     const generateReport = async ({ jobDescription, selfDescription, resumeFile, idempotencyKey }) => {
-        setLoading(true)
+        setAnalysisLoading(true)
         setAnalysisProgress({ stage: "resume", status: "started" })
         try {
             const response = await generateInterviewReport({ jobDescription, selfDescription, resumeFile, idempotencyKey, onProgress: setAnalysisProgress })
             setReport(response.interviewReport)
             return response.interviewReport
         } finally {
-            setLoading(false)
+            setAnalysisLoading(false)
             setAnalysisProgress(null)
         }
     }
 
     const getReportById = useCallback(async (interviewId) => {
+        const requestGeneration = ++detailRequestGeneration.current
+        const requestIdentity = identityRef.current
         setLoading(true)
         try {
             const response = await getInterviewReportById(interviewId)
-            setReport(response.interviewReport)
+            const currentIdentity = identityRef.current
+            if (requestGeneration === detailRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) setReport(response.interviewReport)
             return response.interviewReport
         } catch (error) {
-            setReport(null)
+            const currentIdentity = identityRef.current
+            if (requestGeneration === detailRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) setReport(null)
             throw error
         } finally {
-            setLoading(false)
+            if (requestGeneration === detailRequestGeneration.current && identityRef.current.userId === requestIdentity.userId && identityRef.current.sessionGeneration === requestIdentity.sessionGeneration) setLoading(false)
         }
     }, [ setLoading, setReport ])
 
     const getReports = useCallback(async ({ silent = false } = {}) => {
         const requestGeneration = ++historyRequestGeneration.current
+        const requestIdentity = identityRef.current
         historyRefreshError.current = null
-        if (!silent) setLoading(true)
+        if (!silent) { setLoading(true); setHistoryLoading(true) }
         setReportsError('')
         let response = null
         try {
             response = await getAllInterviewReports()
-            if (requestGeneration === historyRequestGeneration.current) setReports(response.interviewReports)
-            if (requestGeneration === historyRequestGeneration.current) historyRefreshError.current = null
+            const currentIdentity = identityRef.current
+            if (requestGeneration === historyRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) setReports(response.interviewReports)
+            if (requestGeneration === historyRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) historyRefreshError.current = null
             return response.interviewReports
         } catch (error) {
             console.log(error)
-            if (requestGeneration === historyRequestGeneration.current) {
+            const currentIdentity = identityRef.current
+            if (requestGeneration === historyRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) {
                 historyRefreshError.current = error
                 setReportsError(error?.response?.data?.message || 'Unable to refresh your recent analyses.')
             }
             return []
         } finally {
-            if (!silent && requestGeneration === historyRequestGeneration.current) setLoading(false)
+            if (!silent && requestGeneration === historyRequestGeneration.current && identityRef.current.userId === requestIdentity.userId && identityRef.current.sessionGeneration === requestIdentity.sessionGeneration) { setLoading(false); setHistoryLoading(false) }
         }
-    }, [ setLoading, setReports, setReportsError ])
+    }, [ setHistoryLoading, setLoading, setReports, setReportsError ])
 
     const getResumePdf = async (interviewReportId) => {
         setLoading(true)
@@ -123,6 +139,6 @@ export const useInterview = () => {
         }
     }, [ interviewId, getReportById, getReports ])
 
-    return { loading, analysisProgress, report, reports, reportsError, generateReport, getReportById, getReports, getResumePdf, saveConfirmedSkills, renameReport, pinReport, removeReport }
+    return { loading, analysisLoading, historyLoading, analysisProgress, report, reports, reportsError, generateReport, getReportById, getReports, getResumePdf, saveConfirmedSkills, renameReport, pinReport, removeReport }
 
 }

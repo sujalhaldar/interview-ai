@@ -12,11 +12,20 @@ const userSchema = new mongoose.Schema({
         type: String,
         unique: [ true, "Account already exists with this email address" ],
         required: true,
+        lowercase: true,
+        trim: true
     },
 
-    password: {
+    googleSub: {
         type: String,
-        required: true
+        unique: true,
+        sparse: true,
+        trim: true
+    },
+
+    profilePicture: {
+        type: String,
+        trim: true
     }
 })
 
