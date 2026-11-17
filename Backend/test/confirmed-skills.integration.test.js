@@ -24,7 +24,7 @@ function cookie(userId = USER_ID) {
     return "token=" + jwt.sign({ id: userId }, TEST_SECRET)
 }
 function auth(requestBuilder, userId = USER_ID) {
-    return requestBuilder.set("Cookie", [cookie(userId)]).set("X-Expected-User-Id", userId)
+    return requestBuilder.set("Cookie", [cookie(userId)]).set("X-Expected-User-Id", userId).set("Origin", "http://localhost:5173")
 }
 
 beforeEach(() => {

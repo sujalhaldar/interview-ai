@@ -2,6 +2,7 @@ const express = require("express")
 const authMiddleware = require("../middlewares/auth.middleware")
 const interviewController = require("../controllers/interview.controller")
 const upload = require("../middlewares/file.middleware")
+const { csrfOrigin } = require("../middlewares/csrf.middleware")
 
 const interviewRouter = express.Router()
 
@@ -12,7 +13,7 @@ const interviewRouter = express.Router()
  * @description generate new interview report on the basis of user self description,resume pdf and job description.
  * @access private
  */
-interviewRouter.post("/", authMiddleware.authUser, upload.single("resume"), interviewController.generateInterViewReportController)
+interviewRouter.post("/", authMiddleware.authUser, csrfOrigin, upload.single("resume"), interviewController.generateInterViewReportController)
 
 /**
  * @route GET /api/interview/report/:interviewId
@@ -20,11 +21,12 @@ interviewRouter.post("/", authMiddleware.authUser, upload.single("resume"), inte
  * @access private
  */
 interviewRouter.get("/report/:interviewId", authMiddleware.authUser, interviewController.getInterviewReportByIdController)
+interviewRouter.patch("/report/:interviewId/open", authMiddleware.authUser, csrfOrigin, interviewController.markInterviewReportOpenedController)
 
-interviewRouter.patch("/report/:interviewId/confirmed-skills", authMiddleware.authUser, interviewController.updateConfirmedSkillsController)
-interviewRouter.patch("/report/:interviewId/title", authMiddleware.authUser, interviewController.updateReportTitleController)
-interviewRouter.patch("/report/:interviewId/pin", authMiddleware.authUser, interviewController.updateReportPinController)
-interviewRouter.delete("/report/:interviewId", authMiddleware.authUser, interviewController.deleteInterviewReportController)
+interviewRouter.patch("/report/:interviewId/confirmed-skills", authMiddleware.authUser, csrfOrigin, interviewController.updateConfirmedSkillsController)
+interviewRouter.patch("/report/:interviewId/title", authMiddleware.authUser, csrfOrigin, interviewController.updateReportTitleController)
+interviewRouter.patch("/report/:interviewId/pin", authMiddleware.authUser, csrfOrigin, interviewController.updateReportPinController)
+interviewRouter.delete("/report/:interviewId", authMiddleware.authUser, csrfOrigin, interviewController.deleteInterviewReportController)
 
 
 /**
@@ -40,7 +42,7 @@ interviewRouter.get("/", authMiddleware.authUser, interviewController.getAllInte
  * @description generate resume pdf on the basis of user self description, resume content and job description.
  * @access private
  */
-interviewRouter.post("/resume/pdf/:interviewReportId", authMiddleware.authUser, interviewController.generateResumePdfController)
+interviewRouter.post("/resume/pdf/:interviewReportId", authMiddleware.authUser, csrfOrigin, interviewController.generateResumePdfController)
 
 
 

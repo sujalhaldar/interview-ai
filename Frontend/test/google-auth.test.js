@@ -20,7 +20,7 @@ test('Google button waits for the loading screen to mount its container', () => 
 
 test('Google auth prevents duplicate callbacks and cleans loading state', () => {
     assert.match(auth, /googleLoginInFlight\.current/)
-    assert.match(auth, /if \(generation === transitionGeneration\.current\) setLoading\(false\)/)
+    assert.match(auth, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/)
     assert.match(login, /googleInitializedRef\.current/)
 })
 

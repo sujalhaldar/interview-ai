@@ -2,14 +2,26 @@ const userModel = require("../models/user.model")
 const jwt = require("jsonwebtoken")
 const tokenBlacklistModel = require("../models/blacklist.model")
 const googleAuthService = require("../services/google-auth.service")
+const { hashToken, getVerifiedTokenExpiry } = require("../services/token-blacklist.service")
+const {
+    JWT_ALGORITHM,
+    JWT_EXPIRES_IN,
+    getJwtSecret,
+    getSessionCookieClearOptions,
+    getSessionCookieOptions
+} = require("../config/auth.config")
 
 function authenticatedUserResponse(user) {
     return { id: user._id, username: user.username, email: user.email }
 }
 
 function issueApplicationSession(res, user) {
-    const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: "1d" })
-    res.cookie("token", token)
+    const token = jwt.sign(
+        { id: user._id, username: user.username },
+        getJwtSecret(),
+        { expiresIn: JWT_EXPIRES_IN, algorithm: JWT_ALGORITHM }
+    )
+    res.cookie("token", token, getSessionCookieOptions())
 }
 
 async function googleUserController(req, res) {
@@ -53,10 +65,17 @@ async function logoutUserController(req, res) {
     const token = req.cookies.token
 
     if (token) {
-        await tokenBlacklistModel.create({ token })
+        const expiresAt = getVerifiedTokenExpiry(token)
+        if (expiresAt && expiresAt.getTime() > Date.now()) {
+            try {
+                await tokenBlacklistModel.create({ tokenHash: hashToken(token), expiresAt })
+            } catch {
+                return res.status(503).json({ message: "Unable to complete logout. Please try again." })
+            }
+        }
     }
 
-    res.clearCookie("token")
+    res.clearCookie("token", getSessionCookieClearOptions())
 
     res.status(200).json({
         message: "User logged out successfully"
@@ -71,6 +90,8 @@ async function logoutUserController(req, res) {
 async function getMeController(req, res) {
 
     const user = await userModel.findById(req.user.id)
+
+    if (!user) return res.status(401).json({ message: "User session is no longer valid." })
 
 
 

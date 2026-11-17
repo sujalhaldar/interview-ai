@@ -120,11 +120,7 @@ async function getInterviewReportByIdController(req, res) {
     const { interviewId } = req.params
 
     if (!mongoose.Types.ObjectId.isValid(interviewId)) return res.status(404).json({ message: "Interview report not found." })
-    const interviewReport = await interviewReportModel.findOneAndUpdate(
-        { _id: interviewId, user: req.user.id },
-        { $set: { lastOpenedAt: new Date() } },
-        { new: true, runValidators: true }
-    )
+    const interviewReport = await interviewReportModel.findOne({ _id: interviewId, user: req.user.id })
 
     if (!interviewReport) {
         return res.status(404).json({
@@ -136,6 +132,20 @@ async function getInterviewReportByIdController(req, res) {
         message: "Interview report fetched successfully.",
         interviewReport
     })
+}
+
+async function markInterviewReportOpenedController(req, res) {
+    const { interviewId } = req.params
+
+    if (!mongoose.Types.ObjectId.isValid(interviewId)) return res.status(404).json({ message: "Interview report not found." })
+    const interviewReport = await interviewReportModel.findOneAndUpdate(
+        { _id: interviewId, user: req.user.id },
+        { $set: { lastOpenedAt: new Date() } },
+        { new: true, runValidators: true }
+    )
+
+    if (!interviewReport) return res.status(404).json({ message: "Interview report not found." })
+    return res.status(200).json({ message: "Interview report opened successfully.", interviewReport })
 }
 
 
@@ -320,4 +330,4 @@ async function updateConfirmedSkillsController(req, res) {
     }
 }
 
-module.exports = { generateInterViewReportController, getInterviewReportByIdController, getAllInterviewReportsController, updateReportTitleController, updateReportPinController, deleteInterviewReportController, generateResumePdfController, updateConfirmedSkillsController, normalizeConfirmedSkills, addConfirmedEvidence }
+module.exports = { generateInterViewReportController, getInterviewReportByIdController, markInterviewReportOpenedController, getAllInterviewReportsController, updateReportTitleController, updateReportPinController, deleteInterviewReportController, generateResumePdfController, updateConfirmedSkillsController, normalizeConfirmedSkills, addConfirmedEvidence }

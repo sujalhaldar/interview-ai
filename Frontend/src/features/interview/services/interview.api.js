@@ -41,6 +41,7 @@ export const generateInterviewReport = async ({ jobDescription, selfDescription,
 }
 
 export const getInterviewReportById = async (interviewId) => (await api.get(`/api/interview/report/${interviewId}`)).data
+export const markReportOpened = async (interviewId) => (await api.patch(`/api/interview/report/${interviewId}/open`)).data
 export const getAllInterviewReports = async () => (await api.get("/api/interview/")).data
 export const generateResumePdf = async ({ interviewReportId }) => (await api.post(`/api/interview/resume/pdf/${interviewReportId}`, null, { responseType: "blob" })).data
 export const updateConfirmedSkills = async ({ interviewReportId, skills }) => (await api.patch("/api/interview/report/" + interviewReportId + "/confirmed-skills", { skills })).data

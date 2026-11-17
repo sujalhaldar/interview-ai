@@ -34,6 +34,7 @@ function authenticatedRequest(userId, reportId) {
         .post(`/api/interview/resume/pdf/${reportId}`)
         .set("Cookie", [`token=${tokenFor(userId)}`])
         .set("X-Expected-User-Id", userId)
+        .set("Origin", "http://localhost:5173")
 }
 
 beforeEach(() => {

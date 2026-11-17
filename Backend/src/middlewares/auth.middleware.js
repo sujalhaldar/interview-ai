@@ -1,6 +1,8 @@
 const jwt = require("jsonwebtoken")
 const mongoose = require("mongoose")
 const tokenBlacklistModel = require("../models/blacklist.model")
+const { JWT_ALGORITHM, getJwtSecret } = require("../config/auth.config")
+const { hashToken } = require("../services/token-blacklist.service")
 
 
 
@@ -14,9 +16,14 @@ async function authUser(req, res, next) {
         })
     }
 
-    const isTokenBlacklisted = await tokenBlacklistModel.findOne({
-        token
-    })
+    let isTokenBlacklisted
+    try {
+        isTokenBlacklisted = await tokenBlacklistModel.findOne({
+            $or: [{ tokenHash: hashToken(token) }, { token }]
+        })
+    } catch {
+        return res.status(503).json({ message: "Authentication service unavailable." })
+    }
 
     if (isTokenBlacklisted) {
         return res.status(401).json({
@@ -25,7 +32,7 @@ async function authUser(req, res, next) {
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET)
+        const decoded = jwt.verify(token, getJwtSecret(), { algorithms: [ JWT_ALGORITHM ] })
 
         if (req.baseUrl === "/api/interview") {
             const expectedUserId = req.get("X-Expected-User-Id")

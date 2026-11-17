@@ -1,4 +1,4 @@
-import { getAllInterviewReports, generateInterviewReport, getInterviewReportById, generateResumePdf, updateConfirmedSkills, updateReportTitle, updateReportPin, deleteInterviewReport } from "../services/interview.api"
+import { getAllInterviewReports, generateInterviewReport, getInterviewReportById, markReportOpened, generateResumePdf, updateConfirmedSkills, updateReportTitle, updateReportPin, deleteInterviewReport } from "../services/interview.api"
 import { useCallback, useContext, useEffect, useRef } from "react"
 import { InterviewContext } from "../interview.context"
 import { useParams } from "react-router"
@@ -47,6 +47,7 @@ export const useInterview = () => {
             const response = await getInterviewReportById(interviewId)
             const currentIdentity = identityRef.current
             if (requestGeneration === detailRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) setReport(response.interviewReport)
+            try { await markReportOpened(interviewId) } catch { /* report retrieval remains usable if metadata tracking fails */ }
             return response.interviewReport
         } catch (error) {
             const currentIdentity = identityRef.current

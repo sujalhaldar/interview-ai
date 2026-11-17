@@ -13,7 +13,7 @@ const owner = new mongoose.Types.ObjectId()
 const other = new mongoose.Types.ObjectId()
 let server
 function cookie(user) { return `token=${jwt.sign({ id: user.toString() }, process.env.JWT_SECRET)}` }
-function auth(requestBuilder, user) { return requestBuilder.set("Cookie", [cookie(user)]).set("X-Expected-User-Id", user.toString()) }
+function auth(requestBuilder, user) { return requestBuilder.set("Cookie", [cookie(user)]).set("X-Expected-User-Id", user.toString()).set("Origin", "http://localhost:5173") }
 async function create(data = {}) { return report.create({ user: owner, jobDescription: "Role", title: "Role", analysisVersion: "2.0", ...data }) }
 test.before(async () => { server = await MongoMemoryServer.create({ instance: { dbName: `history-${Date.now()}` } }); await mongoose.connect(server.getUri()); await report.init(); blacklist.findOne = async () => null })
 test.after(async () => { await mongoose.disconnect(); await server.stop() })
@@ -65,7 +65,7 @@ test("history response is owner-scoped and excludes every sensitive field", asyn
     for (const field of ["resume", "selfDescription", "jobDescription", "technicalQuestions", "behavioralQuestions", "skillGaps", "preparationPlan", "historyPinned", "historyDate"]) assert.equal(field in item, false)
 })
 
-test("report retrieval updates only lastOpenedAt after ownership verification", async () => {
+test("GET report retrieval is read-only and the dedicated open endpoint updates lastOpenedAt", async () => {
     const createdAt = new Date("2026-01-01")
     const pinnedAt = new Date("2026-01-02")
     const lastOpenedAt = new Date("2026-01-03")
@@ -74,14 +74,27 @@ test("report retrieval updates only lastOpenedAt after ownership verification", 
     const response = await auth(request(app).get(`/api/interview/report/${created._id}`), owner)
     assert.equal(response.status, 200)
     const after = await report.findById(created._id).lean()
-    assert.ok(after.lastOpenedAt >= before.lastOpenedAt)
-    const firstOpenedAt = after.lastOpenedAt
+    assert.equal(after.lastOpenedAt.getTime(), before.lastOpenedAt.getTime())
+    assert.equal(response.body.interviewReport.lastOpenedAt, before.lastOpenedAt.toISOString())
+
+    await new Promise(resolve => setTimeout(resolve, 5))
+    const opened = await auth(request(app).patch(`/api/interview/report/${created._id}/open`), owner)
+    assert.equal(opened.status, 200)
+    const afterOpen = await report.findById(created._id).lean()
+    assert.ok(afterOpen.lastOpenedAt > before.lastOpenedAt)
+    const firstOpenedAt = afterOpen.lastOpenedAt
     await new Promise(resolve => setTimeout(resolve, 5))
     assert.equal((await auth(request(app).get(`/api/interview/report/${created._id}`), owner)).status, 200)
     const afterSecondOpen = await report.findById(created._id).lean()
-    assert.ok(afterSecondOpen.lastOpenedAt > firstOpenedAt)
+    assert.equal(afterSecondOpen.lastOpenedAt.getTime(), firstOpenedAt.getTime())
     assert.deepEqual({ isPinned: afterSecondOpen.isPinned, pinnedAt: afterSecondOpen.pinnedAt, createdAt: afterSecondOpen.createdAt, matchScore: afterSecondOpen.matchScore, analysisRevision: afterSecondOpen.analysisRevision }, { isPinned: true, pinnedAt: before.pinnedAt, createdAt: before.createdAt, matchScore: 80, analysisRevision: 2 })
     assert.deepEqual(afterSecondOpen.confirmedSkills, before.confirmedSkills)
+    const unauthenticatedOpen = await request(app).patch(`/api/interview/report/${created._id}/open`).set("Origin", "http://localhost:5173")
+    assert.equal(unauthenticatedOpen.status, 401)
+    const crossOriginOpen = await auth(request(app).patch(`/api/interview/report/${created._id}/open`), owner).set("Origin", "https://attacker.example")
+    assert.equal(crossOriginOpen.status, 403)
+    const otherUserOpen = await auth(request(app).patch(`/api/interview/report/${created._id}/open`), other)
+    assert.equal(otherUserOpen.status, 404)
     assert.equal((await auth(request(app).get(`/api/interview/report/${created._id}`), other)).status, 404)
     assert.equal((await auth(request(app).get(`/api/interview/report/${new mongoose.Types.ObjectId()}`), owner)).status, 404)
     assert.equal((await auth(request(app).get("/api/interview/report/bad-id"), owner)).status, 404)

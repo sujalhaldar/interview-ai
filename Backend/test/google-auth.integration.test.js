@@ -13,6 +13,7 @@ const userModel = require("../src/models/user.model")
 const reportModel = require("../src/models/interviewReport.model")
 const blacklist = require("../src/models/blacklist.model")
 const googleAuthService = require("../src/services/google-auth.service")
+const { resetGoogleAuthRateLimit } = require("../src/middlewares/rate-limit.middleware")
 const originalVerify = googleAuthService.verifyGoogleIdToken
 const originalBlacklistFindOne = blacklist.findOne
 let server
@@ -24,6 +25,7 @@ test.before(async () => {
     await userModel.init(); await reportModel.init(); blacklist.findOne = async () => null
 })
 test.beforeEach(async () => {
+    resetGoogleAuthRateLimit()
     await userModel.deleteMany({}); await reportModel.deleteMany({})
     googleAuthService.verifyGoogleIdToken = async token => { if (token !== "valid-token") throw new Error("invalid"); return { ...identity } }
 })
@@ -34,6 +36,23 @@ test("valid Google identity creates an internal user and application session", a
     assert.equal(response.status, 200); assert.ok(response.headers["set-cookie"].some(value => value.startsWith("token=")))
     const user = await userModel.findOne({ googleSub: identity.sub }).lean()
     assert.equal(user.email, identity.email.toLowerCase()); assert.equal(user.profilePicture, identity.picture); assert.equal(response.body.user.id, user._id.toString())
+})
+test("production session cookie has explicit security and lifetime attributes", async () => {
+    const originalNodeEnv = process.env.NODE_ENV
+    const originalCsrfOrigins = process.env.CSRF_ALLOWED_ORIGINS
+    process.env.NODE_ENV = "production"
+    process.env.CSRF_ALLOWED_ORIGINS = "http://localhost:5173"
+    const response = await request(app).post("/api/auth/google").send({ idToken: "valid-token" })
+    const cookie = response.headers["set-cookie"].find(value => value.startsWith("token="))
+    assert.match(cookie, /HttpOnly/)
+    assert.match(cookie, /Secure/)
+    assert.match(cookie, /SameSite=Lax/)
+    assert.match(cookie, /Path=\//)
+    assert.match(cookie, /Max-Age=86400/)
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = originalNodeEnv
+    if (originalCsrfOrigins === undefined) delete process.env.CSRF_ALLOWED_ORIGINS
+    else process.env.CSRF_ALLOWED_ORIGINS = originalCsrfOrigins
 })
 test("existing Google subject resolves to the same user and preserves report ownership", async () => {
     const user = await userModel.create({ username: "existing-google", email: identity.email, googleSub: identity.sub })
@@ -64,6 +83,30 @@ test("Google session works with protected expected-identity validation", async (
     assert.equal((await request(app).get("/api/interview/").set("Cookie", [cookie]).set("X-Expected-User-Id", user._id.toString())).status, 200)
 })
 test("logout continues to revoke the application session", async () => {
-    const login = await request(app).post("/api/auth/google").send({ idToken: "valid-token" }); const cookie = login.headers["set-cookie"]?.find(value => value.startsWith("token="))?.split(";")[0]
-    assert.ok(cookie); await request(app).get("/api/auth/logout").set("Cookie", [cookie]); blacklist.findOne = originalBlacklistFindOne; const user = await userModel.findOne({ googleSub: identity.sub }); assert.equal((await request(app).get("/api/interview/").set("Cookie", [cookie]).set("X-Expected-User-Id", user._id.toString())).status, 401); blacklist.findOne = async () => null
+    const originalNodeEnv = process.env.NODE_ENV
+    const originalCsrfOrigins = process.env.CSRF_ALLOWED_ORIGINS
+    process.env.NODE_ENV = "production"
+    process.env.CSRF_ALLOWED_ORIGINS = "http://localhost:5173"
+    const login = await request(app).post("/api/auth/google").send({ idToken: "valid-token" })
+    const cookie = login.headers["set-cookie"]?.find(value => value.startsWith("token="))?.split(";")[0]
+    assert.ok(cookie)
+
+    const getLogout = await request(app).get("/api/auth/logout").set("Cookie", [cookie])
+    assert.equal(getLogout.status, 404)
+    const logout = await request(app).post("/api/auth/logout").set("Cookie", [cookie]).set("Origin", "http://localhost:5173")
+    const clearedCookie = logout.headers["set-cookie"].find(value => value.startsWith("token="))
+    assert.match(clearedCookie, /HttpOnly/)
+    assert.match(clearedCookie, /Secure/)
+    assert.match(clearedCookie, /SameSite=Lax/)
+    assert.match(clearedCookie, /Path=\//)
+    assert.match(clearedCookie, /Expires=Thu, 01 Jan 1970 00:00:00 GMT/)
+
+    blacklist.findOne = originalBlacklistFindOne
+    const user = await userModel.findOne({ googleSub: identity.sub })
+    assert.equal((await request(app).get("/api/interview/").set("Cookie", [cookie]).set("X-Expected-User-Id", user._id.toString())).status, 401)
+    blacklist.findOne = async () => null
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = originalNodeEnv
+    if (originalCsrfOrigins === undefined) delete process.env.CSRF_ALLOWED_ORIGINS
+    else process.env.CSRF_ALLOWED_ORIGINS = originalCsrfOrigins
 })

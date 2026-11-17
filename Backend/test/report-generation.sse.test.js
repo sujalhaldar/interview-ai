@@ -28,7 +28,7 @@ test.beforeEach(() => {
 test.after(() => { pdfParse.PDFParse = originalPdf; report.create = originalCreate; blacklist.findOne = originalBlacklist; ai.generateQualitativeResumeAnalysis = originalGemini })
 
 function cookie() { return `token=${jwt.sign({ id: "sse-user" }, process.env.JWT_SECRET)}` }
-function auth(requestBuilder) { return requestBuilder.set("Cookie", [cookie()]).set("X-Expected-User-Id", "sse-user") }
+function auth(requestBuilder) { return requestBuilder.set("Cookie", [cookie()]).set("X-Expected-User-Id", "sse-user").set("Origin", "http://localhost:5173") }
 
 test("streams ordered progress and completion after persistence", async () => {
     const response = await auth(request(app).post("/api/interview/")).set("Accept", "text/event-stream").field("jobDescription", "React role").attach("resume", Buffer.from("pdf"), { filename: "resume.pdf", contentType: "application/pdf" })

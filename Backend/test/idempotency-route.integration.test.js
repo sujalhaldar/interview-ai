@@ -24,7 +24,7 @@ let waiting
 let app
 
 function cookie(user) { return `token=${jwt.sign({ id: user.toString() }, process.env.JWT_SECRET)}` }
-function submit(user, key) { return request(app).post("/api/interview/").set("Cookie", [cookie(user)]).set("X-Expected-User-Id", user.toString()).set("Accept", "text/event-stream").set("Idempotency-Key", key).field("jobDescription", "React role").attach("resume", Buffer.from("pdf"), { filename: "resume.pdf", contentType: "application/pdf" }) }
+function submit(user, key) { return request(app).post("/api/interview/").set("Cookie", [cookie(user)]).set("X-Expected-User-Id", user.toString()).set("Origin", "http://localhost:5173").set("Accept", "text/event-stream").set("Idempotency-Key", key).field("jobDescription", "React role").attach("resume", Buffer.from("pdf"), { filename: "resume.pdf", contentType: "application/pdf" }) }
 
 test.before(async () => {
     server = await MongoMemoryServer.create({ instance: { dbName: `idempotency-route-${Date.now()}` } })

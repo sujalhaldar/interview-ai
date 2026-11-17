@@ -12,7 +12,7 @@ export async function googleLogin(idToken) {
 }
 
 export async function logout() {
-    const response = await api.get("/api/auth/logout")
+    const response = await api.post("/api/auth/logout")
     return response.data
 }
 

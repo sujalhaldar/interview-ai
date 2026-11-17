@@ -18,7 +18,7 @@ const originalLegacy = ai.generateInterviewReport
 const owner = new mongoose.Types.ObjectId()
 const other = new mongoose.Types.ObjectId()
 function cookie(user) { return `token=${jwt.sign({ id: user.toString() }, process.env.JWT_SECRET)}` }
-function auth(requestBuilder, user) { return requestBuilder.set("Cookie", [cookie(user)]).set("X-Expected-User-Id", user.toString()) }
+function auth(requestBuilder, user) { return requestBuilder.set("Cookie", [cookie(user)]).set("X-Expected-User-Id", user.toString()).set("Origin", "http://localhost:5173") }
 async function createReport(user = owner) { return report.create({ user, jobDescription: "Role", title: "Original", analysisVersion: "2.0" }) }
 test.before(async () => { server = await MongoMemoryServer.create({ instance: { dbName: `metadata-${Date.now()}` } }); await mongoose.connect(server.getUri()); await report.init(); blacklist.findOne = async () => null })
 test.after(async () => { ai.generateQualitativeResumeAnalysis = originalQualitative; ai.generateInterviewReport = originalLegacy; await mongoose.disconnect(); await server.stop() })

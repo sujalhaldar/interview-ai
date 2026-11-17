@@ -95,6 +95,7 @@ test("authenticated report generation persists validated analysis and backend sc
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
         .field("selfDescription", "Frontend developer")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
@@ -116,6 +117,7 @@ test("persists an explicitly labeled JD title without an additional Gemini call"
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "Position: Senior Platform Engineer")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
@@ -133,6 +135,7 @@ test("invalid Gemini JSON returns 502 and does not persist", async () => {
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
@@ -150,6 +153,7 @@ test("Zod validation failure returns 502 and does not persist", async () => {
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
@@ -166,6 +170,7 @@ test("Gemini rejection returns 502 and does not persist", async () => {
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
@@ -186,6 +191,7 @@ test("rejects a missing job description before invoking Gemini", async () => {
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
     assert.equal(response.status, 400)
@@ -198,6 +204,7 @@ test("rejects a missing resume PDF before invoking Gemini", async () => {
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
         .field("selfDescription", "Frontend developer")
 
@@ -211,6 +218,7 @@ test("does not allow self-description-only submissions", async () => {
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
         .field("selfDescription", "Frontend developer")
 
@@ -228,6 +236,7 @@ test("each downstream pipeline failure stops execution and persistence", async (
             .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
             .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
         assert.equal(response.status, 502)
@@ -252,6 +261,7 @@ test("PDF extraction failure is sanitized and prevents all later stages", async 
         .post("/api/interview/")
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
+        .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
         .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
     assert.equal(response.status, 400)

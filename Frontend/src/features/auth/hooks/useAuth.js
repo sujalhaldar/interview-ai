@@ -13,62 +13,64 @@ const broadcastAuthChange = (userId) => {
 export const useAuth = () => {
 
     const context = useContext(AuthContext)
-    const { user, setUser, loading, setLoading } = context
-    const transitionGeneration = useRef(0)
+    const { user, setUser, loading, setLoading, beginTransition, isCurrentTransition } = context
     const googleLoginInFlight = useRef(false)
 
-    const resolveCurrentUser = async (generation) => {
+    const resolveCurrentUser = useCallback(async (generation) => {
         try {
             const data = await getMe()
-            if (generation !== transitionGeneration.current) return
+            if (!isCurrentTransition(generation)) return
             if (data?.user) { setExpectedUserId(data.user.id); setUser(data.user) }
         } catch {
-            if (generation !== transitionGeneration.current) return
+            if (!isCurrentTransition(generation)) return
             setExpectedUserId(null); setUser(null)
         } finally {
-            if (generation === transitionGeneration.current) setLoading(false)
+            if (isCurrentTransition(generation)) setLoading(false)
         }
-    }
+    }, [isCurrentTransition, setLoading, setUser])
 
 
     const handleGoogleLogin = useCallback(async (idToken) => {
         if (googleLoginInFlight.current) return { success: false, error: { code: "AUTH_IN_PROGRESS" } }
         googleLoginInFlight.current = true
-        const generation = ++transitionGeneration.current
+        const generation = beginTransition()
         setLoading(true)
         try {
             const data = await googleLogin(idToken)
-            if (generation !== transitionGeneration.current) return { success: false, error: { code: "STALE_AUTH_TRANSITION" } }
+            if (!isCurrentTransition(generation)) return { success: false, error: { code: "STALE_AUTH_TRANSITION" } }
             setUser(data.user); setExpectedUserId(data.user.id); broadcastAuthChange(data.user.id)
             return { success: true, user: data.user }
         } catch (err) {
+            if (!isCurrentTransition(generation)) return { success: false, error: { code: "STALE_AUTH_TRANSITION" } }
             return { success: false, error: err }
         } finally {
-            if (generation === transitionGeneration.current) setLoading(false)
+            if (isCurrentTransition(generation)) setLoading(false)
             googleLoginInFlight.current = false
         }
-    }, [setLoading, setUser])
+    }, [beginTransition, isCurrentTransition, setLoading, setUser])
 
-    const handleLogout = async () => {
-        transitionGeneration.current += 1
+    const handleLogout = useCallback(async () => {
+        const generation = beginTransition()
         setLoading(true)
         try {
             await logout()
+            if (!isCurrentTransition(generation)) return { success: false, error: { code: "STALE_AUTH_TRANSITION" } }
             setUser(null)
             setExpectedUserId(null)
             broadcastAuthChange(null)
             return { success: true }
         } catch (err) {
+            if (!isCurrentTransition(generation)) return { success: false, error: { code: "STALE_AUTH_TRANSITION" } }
             return { success: false, error: err }
         } finally {
-            setLoading(false)
+            if (isCurrentTransition(generation)) setLoading(false)
         }
-    }
+    }, [beginTransition, isCurrentTransition, setLoading, setUser])
 
     useEffect(() => {
 
         const handleIdentitySignal = (event) => {
-            const generation = ++transitionGeneration.current
+            const generation = beginTransition()
             const announcedUserId = event?.detail?.userId ?? event?.userId ?? null
             if ((user?.id || null) !== announcedUserId) { setExpectedUserId(null); setUser(null) }
             resolveCurrentUser(generation)
@@ -79,13 +81,13 @@ export const useAuth = () => {
         }
         window.addEventListener(AUTH_EVENT_KEY, handleIdentitySignal)
         window.addEventListener('storage', onStorage)
-        resolveCurrentUser(++transitionGeneration.current)
+        resolveCurrentUser(beginTransition())
         return () => {
             window.removeEventListener(AUTH_EVENT_KEY, handleIdentitySignal)
             window.removeEventListener('storage', onStorage)
         }
 
-    }, [ setLoading, setUser, user?.id ])
+    }, [ beginTransition, resolveCurrentUser, setUser, user?.id ])
 
     return { user, loading, handleGoogleLogin, handleLogout }
 }
