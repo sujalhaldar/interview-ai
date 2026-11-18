@@ -16,6 +16,8 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
 
 // ── Page Shell ───────────────────────────────────────────────────────────────
 .home-page {
+    position: relative;
+    isolation: isolate;
     width: 100%;
     min-height: 100vh;
     background-color: $bg-page;
@@ -28,6 +30,22 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
     justify-content: center;
     padding: 1.5rem clamp(1rem, 2.5vw, 2.5rem);
     gap: 1.5rem;
+}
+
+.home-page > :not(.auth-network-canvas),
+.loading-screen > :not(.auth-network-canvas) {
+    position: relative;
+    z-index: 1;
+}
+
+.home-page .auth-network-canvas,
+.loading-screen .auth-network-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
 }
 
 // ── Page Header ──────────────────────────────────────────────────────────────
@@ -550,6 +568,8 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
 }
 
 .loading-screen {
+    position: relative;
+    isolation: isolate;
     min-height: 100vh;
     display: grid;
     place-content: center;

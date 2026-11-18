@@ -3,6 +3,7 @@ import "../style/home.scss"
 import { useInterview } from '../hooks/useInterview.js'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../../auth/hooks/useAuth'
+import NetworkParticleBackground from '../../auth/components/NetworkParticleBackground'
 
 const Home = () => {
 
@@ -120,6 +121,7 @@ const Home = () => {
     if (analysisLoading) {
         return (
             <main className='loading-screen'>
+                <NetworkParticleBackground />
                 <h1>Finding the story in your experience.</h1>
                 <p>Analyzing your resume against the role to uncover your strengths and opportunities.</p>
                 <div className='analysis-progress-bar' aria-hidden='true'><span /></div>
@@ -137,6 +139,7 @@ const Home = () => {
 
     return (
         <div className='home-page'>
+            <NetworkParticleBackground />
 
             {/* Page Header */}
             <header className='page-header'>
