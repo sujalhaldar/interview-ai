@@ -1,0 +1,83 @@
+.authenticated-shell {
+    --sidebar-width: 4.25rem;
+    min-height: 100vh;
+    padding-left: var(--sidebar-width);
+    box-sizing: border-box;
+    background: #000;
+    transition: padding-left .22s ease;
+}
+
+.authenticated-shell--expanded { --sidebar-width: 15rem; }
+
+.app-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 5;
+    width: var(--sidebar-width);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem .75rem;
+    border-right: 1px solid #333;
+    background: #090b0e;
+    transition: width .22s ease;
+}
+
+.app-sidebar__top { display: grid; gap: .9rem; }
+
+.app-sidebar__toggle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: .25rem;
+    border: 0;
+    border-radius: .65rem;
+    color: #e5e5e5;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+}
+
+.app-sidebar__toggle:hover,
+.app-sidebar__toggle:focus-visible { background: #202020; }
+.app-sidebar__toggle:focus-visible { outline: 2px solid #c0c0c0; outline-offset: 2px; }
+
+.app-sidebar__logo-wrap {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: 0 0 2.75rem;
+    width: 2.75rem;
+    height: 2.75rem;
+}
+
+.app-sidebar__logo,
+.app-sidebar__toggle-icon { grid-area: 1 / 1; transition: opacity .18s ease, transform .18s ease; }
+.app-sidebar__logo { width: 2.5rem; height: 2.25rem; object-fit: contain; }
+.app-sidebar__toggle-icon { display: grid; gap: .28rem; width: 1.2rem; opacity: 0; transform: scale(.8); }
+.app-sidebar__toggle-icon i { display: block; height: 2px; border-radius: 2px; background: #c0c0c0; }
+.app-sidebar__toggle:hover .app-sidebar__logo,
+.app-sidebar__toggle:focus-visible .app-sidebar__logo { opacity: 0; transform: scale(.8); }
+.app-sidebar__toggle:hover .app-sidebar__toggle-icon,
+.app-sidebar__toggle:focus-visible .app-sidebar__toggle-icon { opacity: 1; transform: scale(1); }
+.app-sidebar__brand { color: #e5e5e5; font-size: .95rem; font-weight: 600; letter-spacing: -.02em; }
+.app-sidebar__label { padding: 0 .35rem; color: #858585; font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; }
+.app-sidebar__reserved { display: flex; align-items: center; gap: .6rem; margin-top: 1.25rem; padding: .7rem .35rem; border-top: 1px solid #333; color: #858585; font-size: .75rem; }
+.app-sidebar__reserved-line { width: .65rem; height: 1px; background: #555b64; }
+.authenticated-shell__content { min-width: 0; }
+
+@media (max-width: 640px) {
+    .authenticated-shell { --sidebar-width: 3.5rem; }
+    .authenticated-shell--expanded { --sidebar-width: 13rem; }
+    .app-sidebar { padding: .75rem .5rem; }
+    .app-sidebar__toggle { min-height: 2.5rem; }
+    .app-sidebar__logo-wrap { flex-basis: 2.5rem; width: 2.5rem; height: 2.5rem; }
+    .app-sidebar__logo { width: 2.25rem; height: 2rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .authenticated-shell, .app-sidebar, .app-sidebar__logo, .app-sidebar__toggle-icon { transition: none; }
+}

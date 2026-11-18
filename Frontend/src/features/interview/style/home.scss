@@ -1,17 +1,18 @@
 // ── Variables ────────────────────────────────────────────────────────────────
-$bg-page:        #0d1117;
-$bg-card:        #161b22;
-$bg-panel:       #1c2230;
-$bg-input:       #1e2535;
-$border-color:   #2a3348;
-$text-primary:   #e6edf3;
-$text-muted:     #7d8590;
-$accent:         #ff2d78;
-$accent-alt:     #ff6b9d;
-$badge-required: #ff2d78;
-$badge-best:     #ff2d78;
-$info-bg:        #1b2a4a;
-$info-border:    #2d4a7a;
+$bg-page:        #000000;
+$bg-card:        #171717;
+$bg-panel:       #202020;
+$bg-input:       #0b0b0b;
+$border-color:   #494949;
+$separator-color: #333333;
+$text-primary:   #e5e5e5;
+$text-muted:     #a6a6a6;
+$accent:         #c0c0c0;
+$accent-alt:     #858585;
+$badge-required: #c0c0c0;
+$badge-best:     #c0c0c0;
+$info-bg:        $bg-panel;
+$info-border:    #494949;
 $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
 // ── Page Shell ───────────────────────────────────────────────────────────────
@@ -97,8 +98,8 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
 
 // ── Main Card ─────────────────────────────────────────────────────────────────
 .interview-card {
-    width: 100%;
-    max-width: none;
+    width: min(100%, 56rem);
+    max-width: 56rem;
     background-color: $bg-card;
     border: 1px solid $border-color;
     border-radius: 1rem;
@@ -127,7 +128,7 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
     margin: 0;
     padding: 0.7rem 1.25rem;
     border-top: 1px solid $border-color;
-    color: #ff8f8f;
+    color: $accent;
     font-size: 0.8rem;
     line-height: 1.4;
 }
@@ -135,7 +136,7 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
 // ── Panels ────────────────────────────────────────────────────────────────────
 .panel-divider {
     width: 1px;
-    background-color: $border-color;
+    background-color: $separator-color;
     flex-shrink: 0;
 }
 
@@ -214,7 +215,7 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
 
 .field-error {
     margin: -0.35rem 0 0;
-    color: #ff8f8f;
+    color: $accent;
     font-size: 0.78rem;
     line-height: 1.4;
 }
@@ -229,15 +230,15 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
     letter-spacing: 0.03em;
 
     &--required {
-        background-color: rgba($badge-required, 0.15);
+        background-color: rgba($badge-required, 0.08);
         color: $badge-required;
-        border: 1px solid rgba($badge-required, 0.3);
+        border: 1px solid rgba($badge-required, 0.35);
     }
 
     &--best {
-        background-color: rgba($badge-best, 0.15);
+        background-color: rgba($badge-best, 0.08);
         color: $badge-best;
-        border: 1px solid rgba($badge-best, 0.3);
+        border: 1px solid rgba($badge-best, 0.35);
     }
 }
 
@@ -336,14 +337,14 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
 
     &__icon {
         flex-shrink: 0;
-        color: #4a90e2;
+        color: $accent;
         margin-top: 1px;
     }
 
     p {
         margin: 0;
         font-size: 0.8rem;
-        color: #8ab4f8;
+        color: $text-muted;
         line-height: 1.5;
 
         strong {
@@ -358,8 +359,8 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem 1.5rem;
-    background: linear-gradient(135deg, $accent 0%, darken($accent, 10%) 100%);
-    color: #fff;
+    background: $accent;
+    color: #090b0e;
     font-size: 0.9rem;
     font-weight: 600;
     border: none;
@@ -386,8 +387,8 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    width: 100%;
-    max-width: none;
+    width: min(100%, 56rem);
+    max-width: 56rem;
 
     .reports-list{
         display: flex;
