@@ -135,9 +135,8 @@ export const useInterview = () => {
     useEffect(() => {
         if (interviewId) {
             getReportById(interviewId)
-        } else {
-            getReports()
         }
+        getReports()
     }, [ interviewId, getReportById, getReports ])
 
     return { loading, analysisLoading, historyLoading, analysisProgress, report, reports, reportsError, generateReport, getReportById, getReports, getResumePdf, saveConfirmedSkills, renameReport, pinReport, removeReport }
