@@ -91,8 +91,9 @@ const Login = () => {
             </nav>
 
             <div className="auth-container">
+                <img className="auth-hero-logo" src="/assets/almacv-fanburst.png" alt="AlmaCV" />
                 <div className="auth-copy">
-                    <p className="auth-eyebrow">Interview AI</p>
+                    <p className="auth-eyebrow">RESUME INTELLIGENCE</p>
                     <h1>One Resume. Every Opportunity.</h1>
                     <p className="auth-subheading">Your resume, tailored for every role.</p>
                 </div>
