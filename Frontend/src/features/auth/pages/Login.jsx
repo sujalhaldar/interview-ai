@@ -80,11 +80,13 @@ const Login = () => {
         <main className="auth-page">
             <NetworkParticleBackground />
             <nav className="auth-nav" aria-label="Primary navigation">
-                <div className="auth-brand" aria-label="Interview AI">
-                    <span className="auth-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
-                    <span>Interview AI</span>
+                <div className="auth-brand" aria-label="AlmaCV">
+                    <img className="auth-brand-logo" src="/assets/almacv-fanburst.png" alt="" aria-hidden="true" />
+                    <span className="auth-brand-name">AlmaCV</span>
                 </div>
+                <span className="auth-nav-separator" aria-hidden="true" />
                 <button className="auth-nav-item" type="button" onClick={() => setManifestoOpen(true)}>Manifesto</button>
+                <span className="auth-nav-separator" aria-hidden="true" />
                 <a className="auth-nav-item" href="mailto:sujalhaldar2004@gmail.com" target="_blank" rel="noopener noreferrer">Contact</a>
             </nav>
 
