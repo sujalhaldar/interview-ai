@@ -1,14 +1,89 @@
-import { useContext, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { InterviewContext } from '../../interview/interview.context'
+import { useAuth } from '../hooks/useAuth'
 import './authenticated-shell.scss'
+
+const getProfileName = user => user?.username || user?.email || 'Account'
+
+const getInitials = user => getProfileName(user)
+    .split(/\s+|[-_]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0].toUpperCase())
+    .join('') || '?'
 
 const AuthenticatedShell = ({ children }) => {
     const [expanded, setExpanded] = useState(false)
-    const { historyLoading, reports, reportsError } = useContext(InterviewContext)
+    const [menuOpen, setMenuOpen] = useState(false)
+    const [accountOpen, setAccountOpen] = useState(false)
+    const [logoutPending, setLogoutPending] = useState(false)
+    const { historyLoading, reports, reportsError, user } = useContext(InterviewContext)
+    const { handleLogout } = useAuth()
     const navigate = useNavigate()
     const location = useLocation()
+    const profileRef = useRef(null)
+    const menuRef = useRef(null)
+    const accountCloseRef = useRef(null)
     const activeId = location.pathname.startsWith('/interview/') ? location.pathname.split('/')[2] : null
+    const profileName = getProfileName(user)
+    const profileImage = user?.profilePicture
+    const profileInitials = getInitials(user)
+
+    useEffect(() => {
+        if (!menuOpen && !accountOpen) return undefined
+        const handlePointerDown = event => {
+            if (!profileRef.current?.contains(event.target)) {
+                setMenuOpen(false)
+                setAccountOpen(false)
+            }
+        }
+        const handleKeyDown = event => {
+            if (event.key === 'Escape') {
+                setMenuOpen(false)
+                setAccountOpen(false)
+                profileRef.current?.querySelector('.app-sidebar__profile-control')?.focus()
+            }
+        }
+        document.addEventListener('pointerdown', handlePointerDown)
+        document.addEventListener('keydown', handleKeyDown)
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown)
+            document.removeEventListener('keydown', handleKeyDown)
+        }
+    }, [ menuOpen, accountOpen ])
+
+    useEffect(() => {
+        if (menuOpen) menuRef.current?.querySelector('[role="menuitem"]')?.focus()
+    }, [ menuOpen ])
+
+    useEffect(() => {
+        if (accountOpen) accountCloseRef.current?.focus()
+    }, [ accountOpen ])
+
+    const closeAccount = () => {
+        setAccountOpen(false)
+        profileRef.current?.querySelector('.app-sidebar__profile-control')?.focus()
+    }
+
+    const submitLogout = async () => {
+        if (logoutPending) return
+        setLogoutPending(true)
+        setMenuOpen(false)
+        const result = await handleLogout()
+        if (result?.success) navigate('/login', { replace: true })
+        setLogoutPending(false)
+    }
+
+    const handleMenuKeyDown = event => {
+        const items = [...menuRef.current?.querySelectorAll('[role="menuitem"]') || []]
+        const index = items.indexOf(document.activeElement)
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+            event.preventDefault()
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length
+            items[next]?.focus()
+        }
+    }
 
     return (
         <div className={`authenticated-shell${expanded ? ' authenticated-shell--expanded' : ''}`}>
@@ -17,7 +92,7 @@ const AuthenticatedShell = ({ children }) => {
                 aria-label='Application navigation'
                 onClick={(event) => {
                     if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return
-                    if (!expanded && !event.target.closest('.app-sidebar__toggle')) setExpanded(true)
+                    if (!expanded && !event.target.closest('.app-sidebar__toggle, .app-sidebar__profile-control, .app-sidebar__account-menu')) setExpanded(true)
                 }}
             >
                 <div className='app-sidebar__top'>
@@ -64,7 +139,6 @@ const AuthenticatedShell = ({ children }) => {
                                         type='button'
                                         key={report._id}
                                         onClick={() => navigate(`/interview/${report._id}`)}
-                                        title={report.title || 'Untitled report'}
                                     >
                                         <span className='app-sidebar__history-title'>{report.title || 'Untitled report'}</span>
                                         <span className='app-sidebar__history-meta'>
@@ -76,6 +150,44 @@ const AuthenticatedShell = ({ children }) => {
                         )}
                     </div>
                 )}
+                <div className='app-sidebar__profile' ref={profileRef}>
+                    <button className='app-sidebar__profile-control' type='button' aria-label={`Open account menu for ${profileName}`} aria-haspopup='menu' aria-expanded={menuOpen} onClick={() => { setMenuOpen(value => !value); setAccountOpen(false) }}>
+                        <span className='app-sidebar__avatar' aria-hidden='true'>
+                            {profileImage ? <img src={profileImage} alt='' /> : profileInitials}
+                        </span>
+                        {expanded && (
+                            <span className='app-sidebar__profile-copy'>
+                                <span className='app-sidebar__profile-name'>{profileName}</span>
+                                <span className='app-sidebar__profile-label'>Account</span>
+                            </span>
+                        )}
+                    </button>
+                    {menuOpen && (
+                        <div className='app-sidebar__account-menu' ref={menuRef} role='menu' aria-label='Account menu' onKeyDown={handleMenuKeyDown}>
+                            <button type='button' role='menuitem' onClick={() => { setMenuOpen(false); setAccountOpen(true) }}>
+                                <svg viewBox='0 0 24 24' aria-hidden='true'><circle cx='12' cy='8' r='3.5' /><path d='M5 20c.7-3.3 3.1-5 7-5s6.3 1.7 7 5' /></svg>
+                                <span>Account information</span>
+                            </button>
+                            <div className='app-sidebar__account-menu-divider' role='separator' />
+                            <button type='button' role='menuitem' disabled={logoutPending} onClick={submitLogout}>
+                                <svg viewBox='0 0 24 24' aria-hidden='true'><path d='M10 5H5v14h5' /><path d='M13 8l4 4-4 4' /><path d='M17 12H8' /></svg>
+                                <span>{logoutPending ? 'Logging out…' : 'Log out'}</span>
+                            </button>
+                        </div>
+                    )}
+                    {accountOpen && (
+                        <div className='app-sidebar__account-dialog-backdrop' role='presentation' onMouseDown={event => { if (event.target === event.currentTarget) closeAccount() }}>
+                            <section className='app-sidebar__account-dialog' role='dialog' aria-modal='true' aria-labelledby='account-dialog-title'>
+                                <div className='app-sidebar__account-dialog-heading'>
+                                    <span className='app-sidebar__avatar' aria-hidden='true'>{profileImage ? <img src={profileImage} alt='' /> : profileInitials}</span>
+                                    <div><h2 id='account-dialog-title'>Account information</h2><p>{profileName}</p></div>
+                                </div>
+                                <dl><dt>Email</dt><dd>{user?.email || 'Not available'}</dd></dl>
+                                <button ref={accountCloseRef} type='button' onClick={closeAccount}>Close</button>
+                            </section>
+                        </div>
+                    )}
+                </div>
             </aside>
             <div className='authenticated-shell__content'>{children}</div>
         </div>
