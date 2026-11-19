@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { useInterview } from '../hooks/useInterview'
 import { adaptInterviewReport } from '../report.adapter'
+import { getInterviewLayoutMode, observeInterviewPageWidth } from '../layout-mode'
 import NetworkParticleBackground from '../../auth/components/NetworkParticleBackground'
 import '../style/interview.scss'
 
 const NAV_ITEMS = [
-    ['summary', 'Overall Summary'],
-    ['skills', 'Keyword & Skill Breakdown'],
-    ['experience', 'Experience Alignment'],
-    ['education', 'Education & Certifications'],
-    ['quality', 'Resume Quality'],
+    ['summary', 'Overall Summary', 'OS'],
+    ['skills', 'Keyword & Skill Breakdown', 'KS'],
+    ['experience', 'Experience Alignment', 'EA'],
+    ['education', 'Education & Certifications', 'EC'],
+    ['quality', 'Resume Quality', 'RQ'],
 ]
 
 const textOf = (value) => {
@@ -120,6 +121,14 @@ function ScoreSidebar({ report, isDirty, saving, saveError, saveSuccess, onSave 
     </aside>
 }
 
+function DownloadIcon() {
+    return <svg className='download-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' focusable='false'>
+        <path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' />
+        <polyline points='7 10 12 15 17 10' />
+        <line x1='12' y1='15' x2='12' y2='3' />
+    </svg>
+}
+
 export default function Interview() {
     const { interviewId } = useParams()
     const { report: rawReport, loading, reportLoading, reportError, identityReady, getReportById, getResumePdf, saveConfirmedSkills } = useInterview()
@@ -132,7 +141,13 @@ export default function Interview() {
     const resumeGenerationLock = useRef(false)
     const [saveError, setSaveError] = useState('')
     const [saveSuccess, setSaveSuccess] = useState(false)
+    const [layoutWidth, setLayoutWidth] = useState(null)
+    const pageRef = useRef(null)
     const navigate = useNavigate()
+    const hasReport = Boolean(report)
+    useLayoutEffect(() => {
+        return observeInterviewPageWidth(hasReport ? pageRef.current : null, setLayoutWidth)
+    }, [hasReport])
     const savedSkills = useMemo(() => new Set(report?.confirmedSkills.map(skill => skill.normalizedName.toLowerCase()) || []), [report])
     useEffect(() => {
         if (report) setSelectedSkills(new Set(report.confirmedSkills.map(skill => skill.normalizedName.toLowerCase())))
@@ -167,8 +182,10 @@ export default function Interview() {
         }
     }
     const section = { summary: <SummarySection report={report} />, skills: <SkillsSection report={report} selectedSkills={selectedSkills} onToggle={toggleSkill} />, experience: <DetailSection title='Experience alignment' body={report.experienceAlignment} requirements={requirementsByCategory('relevantProfessionalExperience')} />, education: <DetailSection title='Education & certifications' body={report.educationCertificationAnalysis} requirements={requirementsByCategory('educationAndCertifications')} />, quality: <DetailSection title='Resume quality' body={report.resumeQualityAnalysis} /> }[activeSection]
-    return <main className='interview-page' aria-busy={loading}><NetworkParticleBackground /><div className='interview-layout'>
-        <nav className='interview-nav' aria-label='Resume analysis sections'><div><div className='nav-heading'><span className='nav-heading__title'>Resume Analysis</span></div><div className='nav-items'>{NAV_ITEMS.map(([id, label]) => <button className={'interview-nav__item' + (activeSection === id ? ' interview-nav__item--active' : '')} key={id} type='button' onClick={() => setActiveSection(id)}><span>{label}</span></button>)}</div></div><div className='nav-actions'><button className='button primary-button' type='button' disabled={generatingResume} onClick={downloadIdealResume}>{generatingResume && <span className='button-spinner' aria-hidden='true' />}{generatingResume ? 'Generating…' : 'Download Ideal Resume'}</button>{generatingResume && <p className='download-status' role='status'>Generating your Ideal Resume. This usually takes a few seconds.</p>}{resumeDownloadError && <p className='download-status download-status--error' role='alert'>{resumeDownloadError}</p>}</div></nav>
+    const layoutMode = getInterviewLayoutMode(layoutWidth)
+    const isCompactNavigation = layoutMode === 'compact'
+    return <main ref={pageRef} className={`interview-page interview-page--${layoutMode}${isCompactNavigation ? ' interview-page--nav-collapsed' : ''}`} aria-busy={loading}><NetworkParticleBackground /><div className='interview-layout'>
+        <nav className='interview-nav' aria-label='Resume analysis sections'><div><div className='nav-heading'><span className='nav-heading__title'>Resume Analysis</span></div><div className='nav-items'>{NAV_ITEMS.map(([id, label, shortLabel]) => <button className={'interview-nav__item' + (activeSection === id ? ' interview-nav__item--active' : '')} key={id} type='button' aria-label={label} title={isCompactNavigation ? label : undefined} onClick={() => setActiveSection(id)}><span className='interview-nav__item-icon' aria-hidden='true'>{shortLabel}</span><span className='interview-nav__item-label'>{label}</span></button>)}</div></div><div className='nav-actions'><button className='button primary-button' type='button' aria-label='Download Ideal Resume' title={isCompactNavigation ? 'Download Ideal Resume' : undefined} disabled={generatingResume} onClick={downloadIdealResume}>{isCompactNavigation && !generatingResume ? <DownloadIcon /> : <>{generatingResume && <span className='button-spinner' aria-hidden='true' />}<span className='nav-action-label'>{generatingResume ? 'Generating…' : 'Download Ideal Resume'}</span></>}</button>{generatingResume && <p className='download-status' role='status'>Generating your Ideal Resume. This usually takes a few seconds.</p>}{resumeDownloadError && <p className='download-status download-status--error' role='alert'>{resumeDownloadError}</p>}</div></nav>
         <div className='interview-divider' />
         <section className='interview-content'><header className='content-header'><div><p className='eyebrow'>Candidate report</p><h1>{NAV_ITEMS.find(([id]) => id === activeSection)?.[1]}</h1></div></header>{section}</section>
         <div className='interview-divider' /><ScoreSidebar report={report} isDirty={isDirty} saving={savingSkills} saveError={saveError} saveSuccess={saveSuccess} onSave={saveSkills} />
