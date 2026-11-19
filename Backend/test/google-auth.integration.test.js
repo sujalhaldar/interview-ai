@@ -4,7 +4,7 @@ const mongoose = require("mongoose")
 const request = require("supertest")
 const { MongoMemoryServer } = require("mongodb-memory-server")
 
-process.env.JWT_SECRET = "google-auth-test-secret"
+process.env.JWT_SECRET = "google-auth-test-secret-with-at-least-32-bytes"
 process.env.GOOGLE_CLIENT_ID = "google-client-id"
 process.env.GOOGLE_GENAI_API_KEY = "google-auth-test-key"
 

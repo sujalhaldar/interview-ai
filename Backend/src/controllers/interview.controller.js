@@ -21,6 +21,9 @@ async function generateInterViewReportController(req, res) {
     const { selfDescription, jobDescription } = req.body
     if (typeof jobDescription !== "string" || !jobDescription.trim()) return res.status(400).json({ message: "Job description is required." })
     if (!req.file) return res.status(400).json({ message: "Resume PDF is required." })
+    if (req.file.mimetype !== "application/pdf" || !req.file.buffer?.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
+        return res.status(400).json({ message: "Resume must be a valid PDF file." })
+    }
     const wantsStream = req.headers.accept?.includes("text/event-stream")
     const idempotencyKey = req.headers["idempotency-key"]
     let idempotencyRecord

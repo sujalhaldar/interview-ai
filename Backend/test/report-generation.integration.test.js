@@ -98,7 +98,7 @@ test("authenticated report generation persists validated analysis and backend sc
         .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
         .field("selfDescription", "Frontend developer")
-        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+        .attach("resume", Buffer.from("%PDF-fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
     assert.equal(response.status, 201)
     assert.equal(persisted.user, USER_ID)
@@ -119,7 +119,7 @@ test("persists an explicitly labeled JD title without an additional Gemini call"
         .set("X-Expected-User-Id", USER_ID)
         .set("Origin", "http://localhost:5173")
         .field("jobDescription", "Position: Senior Platform Engineer")
-        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+        .attach("resume", Buffer.from("%PDF-fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
     assert.equal(response.status, 201)
     assert.equal(persisted.title, "Senior Platform Engineer")
@@ -137,7 +137,7 @@ test("invalid Gemini JSON returns 502 and does not persist", async () => {
         .set("X-Expected-User-Id", USER_ID)
         .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
-        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+        .attach("resume", Buffer.from("%PDF-fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
     assert.equal(response.status, 502)
     assert.deepEqual(response.body, { message: "Resume analysis service is temporarily unavailable." })
@@ -155,7 +155,7 @@ test("Zod validation failure returns 502 and does not persist", async () => {
         .set("X-Expected-User-Id", USER_ID)
         .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
-        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+        .attach("resume", Buffer.from("%PDF-fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
     assert.equal(response.status, 502)
     assert.equal(createCalled, false)
@@ -172,7 +172,7 @@ test("Gemini rejection returns 502 and does not persist", async () => {
         .set("X-Expected-User-Id", USER_ID)
         .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
-        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+        .attach("resume", Buffer.from("%PDF-fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
     assert.equal(response.status, 502)
     assert.equal(createCalled, false)
@@ -192,7 +192,7 @@ test("rejects a missing job description before invoking Gemini", async () => {
         .set("Cookie", [ authCookie() ])
         .set("X-Expected-User-Id", USER_ID)
         .set("Origin", "http://localhost:5173")
-        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+        .attach("resume", Buffer.from("%PDF-fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
 
     assert.equal(response.status, 400)
     assert.deepEqual(response.body, { message: "Job description is required." })
@@ -210,6 +210,33 @@ test("rejects a missing resume PDF before invoking Gemini", async () => {
 
     assert.equal(response.status, 400)
     assert.deepEqual(response.body, { message: "Resume PDF is required." })
+    assert.equal(qualitativeCallCount, 0)
+})
+
+test("rejects uploads with a non-PDF MIME type or missing PDF signature before parsing", async () => {
+    let parseCalls = 0
+    pdfParse.PDFParse = class {
+        constructor() { parseCalls += 1 }
+        async getText() { return { text: "should not be parsed" } }
+    }
+
+    for (const upload of [
+        { bytes: "%PDF-valid-looking", contentType: "text/plain" },
+        { bytes: "not a pdf", contentType: "application/pdf" }
+    ]) {
+        const response = await request(app)
+            .post("/api/interview/")
+            .set("Cookie", [ authCookie() ])
+            .set("X-Expected-User-Id", USER_ID)
+            .set("Origin", "http://localhost:5173")
+            .field("jobDescription", "React role")
+            .attach("resume", Buffer.from(upload.bytes), { filename: "resume.pdf", contentType: upload.contentType })
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(response.body, { message: "Resume must be a valid PDF file." })
+    }
+
+    assert.equal(parseCalls, 0)
     assert.equal(qualitativeCallCount, 0)
 })
 
@@ -238,7 +265,7 @@ test("each downstream pipeline failure stops execution and persistence", async (
         .set("X-Expected-User-Id", USER_ID)
         .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
-            .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+            .attach("resume", Buffer.from("%PDF-fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
         assert.equal(response.status, 502)
         assert.deepEqual(response.body, { message: "Resume analysis service is temporarily unavailable." })
         assert.equal(createCalled, false)
@@ -263,7 +290,7 @@ test("PDF extraction failure is sanitized and prevents all later stages", async 
         .set("X-Expected-User-Id", USER_ID)
         .set("Origin", "http://localhost:5173")
         .field("jobDescription", "React role")
-        .attach("resume", Buffer.from("fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+        .attach("resume", Buffer.from("%PDF-fake pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
     assert.equal(response.status, 400)
     assert.deepEqual(response.body, { message: "Resume analysis service is temporarily unavailable." })
     assert.equal(createCalled, false)

@@ -337,42 +337,94 @@ Return only the six requested fields. Do not calculate scores. Do not classify s
 
 
 
+const resumePdfEntrySchema = z.object({
+    title: boundedText(180),
+    subtitle: z.string().trim().max(180).optional(),
+    dateRange: z.string().trim().max(80).optional(),
+    bullets: z.array(boundedText(500)).max(8)
+}).strict()
+
+const resumePdfSectionSchema = z.object({
+    heading: boundedText(100),
+    entries: z.array(resumePdfEntrySchema).max(10)
+}).strict()
+
+const resumePdfSchema = z.object({
+    fullName: boundedText(100),
+    contactDetails: z.array(boundedText(160)).max(6),
+    summary: z.string().trim().max(1500).optional(),
+    sections: z.array(resumePdfSectionSchema).max(12)
+}).strict()
+
+const MAX_RESUME_PDF_INPUT_CHARS = 100_000
+const MAX_RESUME_PDF_RESPONSE_CHARS = 64 * 1024
+const PDF_BROWSER_TIMEOUT_MS = 15_000
+const PDF_CONTENT_TIMEOUT_MS = 10_000
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    })[character])
+}
+
+function renderResumeHtml(resume) {
+    const contactDetails = resume.contactDetails.map(value => `<span>${escapeHtml(value)}</span>`).join("")
+    const summary = resume.summary ? `<section><h2>Summary</h2><p>${escapeHtml(resume.summary)}</p></section>` : ""
+    const sections = resume.sections.map(section => {
+        const entries = section.entries.map(entry => `
+            <article>
+                <div class="entry-heading"><h3>${escapeHtml(entry.title)}</h3>${entry.dateRange ? `<span>${escapeHtml(entry.dateRange)}</span>` : ""}</div>
+                ${entry.subtitle ? `<p class="subtitle">${escapeHtml(entry.subtitle)}</p>` : ""}
+                ${entry.bullets.length ? `<ul>${entry.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>` : ""}
+            </article>`).join("")
+        return `<section><h2>${escapeHtml(section.heading)}</h2>${entries}</section>`
+    }).join("")
+
+    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>
+        * { box-sizing: border-box; } body { color: #202938; font: 11pt Arial, sans-serif; line-height: 1.4; }
+        h1 { margin: 0 0 5px; font-size: 22pt; } h2 { margin: 18px 0 8px; padding-bottom: 3px; border-bottom: 1px solid #9aa5b1; font-size: 13pt; text-transform: uppercase; }
+        h3 { margin: 0; font-size: 11pt; } p { margin: 5px 0; white-space: pre-wrap; } .contact { display: flex; flex-wrap: wrap; gap: 4px 12px; color: #475569; }
+        .entry-heading { display: flex; justify-content: space-between; gap: 12px; } .subtitle { color: #475569; }
+        article { margin: 0 0 10px; break-inside: avoid; } ul { margin: 5px 0 0; padding-left: 18px; } li { margin: 2px 0; white-space: pre-wrap; }
+    </style></head><body><main><header><h1>${escapeHtml(resume.fullName)}</h1><div class="contact">${contactDetails}</div></header>${summary}${sections}</main></body></html>`
+}
+
 async function generatePdfFromHtml(htmlContent) {
-    const browser = await puppeteer.launch()
-    const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: "networkidle0" })
+    const browser = await puppeteer.launch({ timeout: PDF_BROWSER_TIMEOUT_MS })
+    try {
+        const page = await browser.newPage()
+        await page.setJavaScriptEnabled(false)
+        await page.setRequestInterception(true)
+        page.on("request", request => request.abort().catch(() => {}))
+        await page.setContent(htmlContent, { waitUntil: "domcontentloaded", timeout: PDF_CONTENT_TIMEOUT_MS })
 
-    const pdfBuffer = await page.pdf({
-        format: "A4", margin: {
-            top: "20mm",
-            bottom: "20mm",
-            left: "15mm",
-            right: "15mm"
-        }
-    })
-
-    await browser.close()
-
-    return pdfBuffer
+        return await page.pdf({
+            format: "A4",
+            timeout: PDF_BROWSER_TIMEOUT_MS,
+            margin: { top: "20mm", bottom: "20mm", left: "15mm", right: "15mm" }
+        })
+    } finally {
+        await browser.close()
+    }
 }
 
 async function generateResumePdf({ resume, selfDescription, jobDescription, analysisContext = null }) {
-
-    const resumePdfSchema = z.object({
-        html: z.string().describe("The HTML content of the resume which can be converted to PDF using any library like puppeteer")
-    })
-
     const context = analysisContext && typeof analysisContext === "object" ? JSON.stringify(analysisContext) : "No persisted V2 analysis context is available."
+    const inputTextLength = [resume, selfDescription, jobDescription, context].reduce((total, value) => total + (typeof value === "string" ? value.length : 0), 0)
+    if (inputTextLength > MAX_RESUME_PDF_INPUT_CHARS) throw new Error("Resume PDF input exceeds the size limit")
     const prompt = `Generate resume for a candidate with the following details:
                         Resume: ${resume}
                         Self Description: ${selfDescription}
                         Job Description: ${jobDescription}
                         Persisted Resume Analysis Context: ${context}
 
-                        the response should be a JSON object with a single field "html" which contains the HTML content of the resume which can be converted to PDF using any library like puppeteer.
-                        The resume should be tailored for the given job description and should highlight the candidate's strengths and relevant experience. The HTML content should be well-formatted and structured, making it easy to read and visually appealing.
+                        Return a JSON object matching the provided schema. Provide the candidate name, contact details, an optional summary, and up to 12 sections. Each section has a heading and up to 10 entries; entries have a title, optional subtitle and date range, and up to 8 factual bullet points. Return plain text only, never HTML, CSS, links, images, SVG, or code.
+                        The resume should be tailored for the given job description and should highlight the candidate's strengths and relevant experience.
                         The content of resume should be not sound like it's generated by AI and should be as close as possible to a real human-written resume.
-                        you can highlight the content using some colors or different font styles but the overall design should be simple and professional.
                         The content should be ATS friendly, i.e. it should be easily parsable by ATS systems without losing important information.
                         The resume should not be so lengthy, it should ideally be 1-2 pages long when converted to PDF. Focus on quality rather than quantity and make sure to include all the relevant information that can increase the candidate's chances of getting an interview call for the given job description.
 
@@ -383,25 +435,36 @@ async function generateResumePdf({ resume, selfDescription, jobDescription, anal
                         - Never use a confirmed skill to claim professional experience, project usage, production deployment, duration, responsibilities, achievements, certifications, or education.
                         - Never add a confirmed skill to an existing project's technology stack unless the original resume evidence explicitly associates it with that project.
                         - Do not create projects, employers, credentials, achievements, metrics, or unsupported technology claims.
-                        - Preserve the original resume's factual content, section hierarchy, and meaning while improving clarity and tailoring emphasis to the job description.
-                    `
+                        - Preserve the original resume's factual content, section hierarchy, and meaning while improving clarity and tailoring emphasis to the job description.`
 
     const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt,
         config: {
             responseMimeType: "application/json",
-            responseSchema: zodToJsonSchema(resumePdfSchema),
+            responseSchema: geminiResponseSchema(zodToJsonSchema(resumePdfSchema, { $refStrategy: "none" }))
         }
     })
 
+    if (typeof response?.text !== "string" || response.text.length > MAX_RESUME_PDF_RESPONSE_CHARS) {
+        throw new Error("Resume PDF model response is missing or exceeds the size limit")
+    }
 
-    const jsonContent = JSON.parse(response.text)
+    let parsed
+    try {
+        parsed = JSON.parse(response.text)
+    } catch (error) {
+        throw new ResumeAnalysisServiceError("Resume PDF model response was not valid JSON", { stage: "json_parsing", cause: error })
+    }
+    const validated = resumePdfSchema.safeParse(parsed)
+    if (!validated.success) {
+        throw new ResumeAnalysisServiceError("Resume PDF model response failed schema validation", {
+            stage: "schema_validation",
+            zodIssues: validated.error.issues.map(issue => ({ path: issue.path.join("."), code: issue.code }))
+        })
+    }
 
-    const pdfBuffer = await generatePdfFromHtml(jsonContent.html)
-
-    return pdfBuffer
-
+    return generatePdfFromHtml(renderResumeHtml(validated.data))
 }
 
 module.exports = {

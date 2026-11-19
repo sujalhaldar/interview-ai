@@ -8,6 +8,9 @@ function getJwtSecret() {
     if (typeof secret !== "string" || !secret.trim()) {
         throw new Error("JWT_SECRET is not configured")
     }
+    if (process.env.NODE_ENV === "production" && Buffer.byteLength(secret.trim(), "utf8") < 32) {
+        throw new Error("JWT_SECRET must contain at least 32 bytes in production")
+    }
     return secret
 }
 

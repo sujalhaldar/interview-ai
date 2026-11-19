@@ -56,7 +56,7 @@ test("deletion preserves idempotency records and stale retry can recover", async
     assert.equal((await request(app).delete(`/api/interview/report/${created._id}`).set("Cookie", [cookie(owner)]).set("X-Expected-User-Id", owner.toString()).set("Origin", "http://localhost:5173")).status, 200)
     assert.ok(await idempotency.findOne({ user: owner, key }))
     assert.equal((await request(app).get(`/api/interview/report/${created._id}`).set("Cookie", [cookie(owner)]).set("X-Expected-User-Id", owner.toString())).status, 404)
-    const retry = await request(app).post("/api/interview/").set("Cookie", [cookie(owner)]).set("X-Expected-User-Id", owner.toString()).set("Origin", "http://localhost:5173").set("Accept", "text/event-stream").set("Idempotency-Key", key).field("jobDescription", "React role").attach("resume", Buffer.from("pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+    const retry = await request(app).post("/api/interview/").set("Cookie", [cookie(owner)]).set("X-Expected-User-Id", owner.toString()).set("Origin", "http://localhost:5173").set("Accept", "text/event-stream").set("Idempotency-Key", key).field("jobDescription", "React role").attach("resume", Buffer.from("%PDF-pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
     assert.equal(retry.status, 200)
     assert.equal(geminiCalls, 1)
     assert.match(retry.text, /event: complete/)

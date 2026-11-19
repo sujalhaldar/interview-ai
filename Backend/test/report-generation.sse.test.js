@@ -31,7 +31,7 @@ function cookie() { return `token=${jwt.sign({ id: "sse-user" }, process.env.JWT
 function auth(requestBuilder) { return requestBuilder.set("Cookie", [cookie()]).set("X-Expected-User-Id", "sse-user").set("Origin", "http://localhost:5173") }
 
 test("streams ordered progress and completion after persistence", async () => {
-    const response = await auth(request(app).post("/api/interview/")).set("Accept", "text/event-stream").field("jobDescription", "React role").attach("resume", Buffer.from("pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+    const response = await auth(request(app).post("/api/interview/")).set("Accept", "text/event-stream").field("jobDescription", "React role").attach("resume", Buffer.from("%PDF-pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
     assert.equal(response.status, 200)
     assert.match(response.headers["content-type"], /text\/event-stream/)
     assert.equal(persisted, true)
@@ -42,7 +42,7 @@ test("streams ordered progress and completion after persistence", async () => {
 
 test("streams a terminal sanitized error without completion", async () => {
     geminiFailure = true
-    const response = await auth(request(app).post("/api/interview/")).set("Accept", "text/event-stream").field("jobDescription", "React role").attach("resume", Buffer.from("pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
+    const response = await auth(request(app).post("/api/interview/")).set("Accept", "text/event-stream").field("jobDescription", "React role").attach("resume", Buffer.from("%PDF-pdf"), { filename: "resume.pdf", contentType: "application/pdf" })
     assert.equal(response.status, 200)
     assert.match(response.text, /event: error/)
     assert.doesNotMatch(response.text, /provider failure/)

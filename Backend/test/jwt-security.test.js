@@ -63,6 +63,20 @@ test("missing JWT secret fails configuration validation", () => {
     else process.env.JWT_SECRET = originalSecret
 })
 
+test("production JWT secret requires at least 32 bytes", () => {
+    const originalNodeEnv = process.env.NODE_ENV
+    const originalSecret = process.env.JWT_SECRET
+    process.env.NODE_ENV = "production"
+    process.env.JWT_SECRET = "short-secret"
+    assert.throws(() => authConfig.assertJwtSecretConfigured(), /at least 32 bytes in production/)
+    process.env.JWT_SECRET = "a-randomly-generated-production-secret-with-32-bytes-or-more"
+    assert.doesNotThrow(() => authConfig.assertJwtSecretConfigured())
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = originalNodeEnv
+    if (originalSecret === undefined) delete process.env.JWT_SECRET
+    else process.env.JWT_SECRET = originalSecret
+})
+
 test("valid JWT authenticates with the expected identity", async () => {
     const token = jwt.sign({ id: "user-a", username: "user-a" }, TEST_JWT_SECRET, { algorithm: authConfig.JWT_ALGORITHM })
     const response = await request(app)
