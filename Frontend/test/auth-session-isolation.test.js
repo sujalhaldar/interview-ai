@@ -8,14 +8,16 @@ const authContext = read('../src/features/auth/auth.context.jsx')
 const loginPage = read('../src/features/auth/pages/Login.jsx')
 const interviewContext = read('../src/features/interview/interview.context.jsx')
 const interviewHook = read('../src/features/interview/hooks/useInterview.js')
+const reportDetailLifecycle = read('../src/features/interview/report-detail.lifecycle.js')
 const interviewApi = read('../src/features/interview/services/interview.api.js')
 const homePage = read('../src/features/interview/pages/Home.jsx')
+const authenticatedShell = read('../src/features/auth/components/AuthenticatedShell.jsx')
 
 test('Google authentication remains the only login UI and reports errors', () => {
     assert.doesNotMatch(loginPage, /type="password"|handleLogin|\/register/)
     assert.match(loginPage, /google\.accounts\.id\.initialize/)
     assert.match(loginPage, /role='alert'/)
-    assert.match(authHook, /return \{ success: false, error: err \}/)
+    assert.match(authContext, /return \{ success: false, error: err \}/)
 })
 
 test('identity transitions clear user-scoped interview state', () => {
@@ -27,18 +29,34 @@ test('identity transitions clear user-scoped interview state', () => {
 })
 
 test('cross-tab identity signals invalidate before current-user resolution', () => {
-    assert.match(authHook, /announcedUserId\) \{ setExpectedUserId\(null\); setUser\(null\) \}/)
-    assert.match(authHook, /resolveCurrentUser\(generation\)/)
-    assert.match(authHook, /window\.addEventListener\('storage'/)
-    assert.match(authHook, /setExpectedUserId\(null\); setUser\(null\)/)
+    assert.match(authContext, /const nextUserId = announcedUserId \|\| null/)
+    assert.match(authContext, /setExpectedUserId\(null\)\s*setUser\(null\)/)
+    assert.match(authContext, /resolveCurrentUser\(generation\)/)
+    assert.match(authContext, /window\.addEventListener\('storage'/)
 })
 
 test('history and detail responses require the captured identity and generation', () => {
     assert.match(interviewHook, /const detailRequestGeneration = useRef\(0\)/)
     assert.match(interviewHook, /const requestIdentity = identityRef\.current/)
-    assert.match(interviewHook, /currentIdentity\.userId === requestIdentity\.userId/)
-    assert.match(interviewHook, /currentIdentity\.sessionGeneration === requestIdentity\.sessionGeneration/)
-    assert.match(interviewHook, /historyRequestGeneration\.current \+= 1/)
+    assert.match(interviewHook, /identityRef\.current\.userId === requestIdentity\.userId/)
+    assert.match(interviewHook, /identityRef\.current\.sessionGeneration === requestIdentity\.sessionGeneration/)
+    assert.match(interviewHook, /runReportDetailRequest\(/)
+    assert.match(interviewContext, /historyRequestGeneration\.current \+= 1/)
+})
+
+test('the persistent interview provider owns identity-scoped history refreshes', () => {
+    assert.match(interviewContext, /getAllInterviewReports/)
+    assert.match(interviewContext, /const refreshReports = useCallback/)
+    assert.match(interviewContext, /refreshReports\(\)/)
+    assert.match(interviewContext, /setHistoryLoading\(false\)/)
+    assert.match(interviewContext, /const \[historyLoaded, setHistoryLoaded\] = useState\(false\)/)
+    assert.match(interviewContext, /historyInFlight\.current\?\.userId === requestUserId/)
+    assert.match(interviewContext, /reports, setReports, reportsError, setReportsError, refreshReports/)
+    assert.match(interviewHook, /refreshReports\(\{ silent: true \}\)/)
+    assert.doesNotMatch(interviewHook, /\n\s*getReports\(\)\s*\n/)
+    assert.match(authenticatedShell, /reportsError && !reports\.length/)
+    assert.match(authenticatedShell, /reportsError && reports\.length > 0/)
+    assert.match(authenticatedShell, /!historyLoading && historyLoaded && reports\.length > 0/)
 })
 
 test('protected interview requests carry the expected identity header', () => {
@@ -48,9 +66,12 @@ test('protected interview requests carry the expected identity header', () => {
 })
 
 test('stale errors and loading callbacks are guarded like stale successes', () => {
-    assert.match(interviewHook, /if \(requestGeneration === detailRequestGeneration\.current.*setReport\(null\)/s)
-    assert.match(interviewHook, /if \(requestGeneration === historyRequestGeneration\.current.*setReportsError/s)
-    assert.match(interviewHook, /identityRef\.current\.sessionGeneration === requestIdentity\.sessionGeneration.*setLoading\(false\)/s)
+    assert.match(interviewHook, /const isCurrent = \(\) => requestGeneration === detailRequestGeneration\.current && identityRef\.current\.userId === requestIdentity\.userId && identityRef\.current\.sessionGeneration === requestIdentity\.sessionGeneration/)
+    assert.match(reportDetailLifecycle, /if \(isCurrent\(\)\) onError\(reportLoadErrorKind\(error\)\)/)
+    assert.match(reportDetailLifecycle, /if \(isCurrent\(\)\) onSettled\(\)/)
+    assert.match(interviewContext, /if \(requestGeneration !== historyRequestGeneration\.current \|\| currentUserIdRef\.current !== requestUserId\) return \[\]/)
+    assert.match(interviewContext, /if \(!silent && requestGeneration === historyRequestGeneration\.current.*setHistoryLoading\(false\)/s)
+    assert.match(interviewHook, /onSettled: \(\) => setReportLoading\(false\)/)
 })
 
 test('history loading is separate from explicit analysis progress loading', () => {
@@ -64,30 +85,43 @@ test('history loading is separate from explicit analysis progress loading', () =
 })
 
 test('logout completions are protected from newer identity transitions', () => {
-    assert.match(authHook, /const handleLogout = useCallback\(async \(\) => \{\s*const generation = beginTransition\(\)/s)
-    assert.match(authHook, /await logout\(\)\s*if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}/s)
-    assert.match(authHook, /if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}\s*setUser\(null\)\s*setExpectedUserId\(null\)\s*broadcastAuthChange\(null\)/s)
-    assert.match(authHook, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/s)
+    assert.match(authContext, /const handleLogout = useCallback\(async \(\) => \{\s*const generation = beginTransition\(\)/s)
+    assert.match(authContext, /await logout\(\)\s*if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}/s)
+    assert.match(authContext, /if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}\s*setUser\(null\)\s*setExpectedUserId\(null\)\s*broadcastAuthChange\(null\)/s)
+    assert.match(authContext, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/s)
 })
 
 test('all auth consumers share one provider-owned transition generation', () => {
     assert.match(authContext, /const transitionGeneration = useRef\(0\)/)
     assert.match(authContext, /const beginTransition = useCallback\(\(\) => \{\s*transitionGeneration\.current \+= 1/s)
     assert.match(authContext, /const isCurrentTransition = useCallback\(generation => generation === transitionGeneration\.current/s)
-    assert.match(authContext, /value=\{\{user,setUser,loading,setLoading,beginTransition,isCurrentTransition\}\}/)
-    assert.match(authHook, /const \{ user, setUser, loading, setLoading, beginTransition, isCurrentTransition \} = context/)
+    assert.match(authContext, /value=\{\{ user, setUser, loading, setLoading, beginTransition, isCurrentTransition, revalidateCurrentUser, handleGoogleLogin, handleLogout \}\}/)
+    assert.match(authHook, /useContext\(AuthContext\)/)
     assert.doesNotMatch(authHook, /const transitionGeneration = useRef\(0\)/)
 })
 
+test('AuthProvider owns the single authentication bootstrap lifecycle', () => {
+    assert.match(authContext, /useEffect/)
+    assert.match(authContext, /getMe\(\)/)
+    assert.match(authContext, /window\.addEventListener\(AUTH_EVENT_KEY, handleIdentitySignal\)/)
+    assert.match(authContext, /const initializationStarted = useRef\(false\)/)
+    assert.match(authContext, /handleGoogleLogin/)
+    assert.match(authContext, /handleLogout/)
+    assert.doesNotMatch(authHook, /useEffect/)
+    assert.doesNotMatch(authHook, /getMe\(\)/)
+    assert.doesNotMatch(authHook, /addEventListener/)
+    assert.doesNotMatch(authHook, /user\?\.id/)
+})
+
 test('stale login and get-me completions cannot update shared auth state', () => {
-    assert.match(authHook, /const generation = beginTransition\(\)/)
-    assert.match(authHook, /if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}/s)
-    assert.match(authHook, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/s)
-    assert.match(authHook, /if \(!isCurrentTransition\(generation\)\) return/s)
+    assert.match(authContext, /const generation = beginTransition\(\)/)
+    assert.match(authContext, /if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}/s)
+    assert.match(authContext, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/s)
+    assert.match(authContext, /if \(!isCurrentTransition\(generation\)\) return/s)
 })
 
 test('report opening keeps retrieval read-only and best-effort tracks last opened time', () => {
     assert.match(interviewApi, /patch\(`\/api\/interview\/report\/\$\{interviewId\}\/open`\)/)
-    assert.match(interviewHook, /const response = await getInterviewReportById\(interviewId\)[\s\S]*await markReportOpened\(interviewId\)/)
-    assert.match(interviewHook, /catch \{ \/\* report retrieval remains usable if metadata tracking fails \*\/ \}/)
+    assert.match(interviewHook, /load: async \(\) => \(await getInterviewReportById\(interviewId\)\)\.interviewReport/)
+    assert.match(reportDetailLifecycle, /Promise\.resolve\(\)\.then\(\(\) => isCurrent\(\) \? markOpened\(\) : undefined\)\.catch\(\(\) => \{ \/\* opening metadata is best effort \*\//)
 })

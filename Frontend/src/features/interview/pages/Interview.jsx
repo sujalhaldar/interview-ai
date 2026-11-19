@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { useInterview } from '../hooks/useInterview'
 import { adaptInterviewReport } from '../report.adapter'
+import { getInterviewLayoutMode, observeInterviewPageWidth } from '../layout-mode'
+import NetworkParticleBackground from '../../auth/components/NetworkParticleBackground'
 import '../style/interview.scss'
 
 const NAV_ITEMS = [
-    ['summary', 'Overall Summary'],
-    ['skills', 'Keyword & Skill Breakdown'],
-    ['experience', 'Experience Alignment'],
-    ['education', 'Education & Certifications'],
-    ['quality', 'Resume Quality'],
+    ['summary', 'Overall Summary', 'OS'],
+    ['skills', 'Keyword & Skill Breakdown', 'KS'],
+    ['experience', 'Experience Alignment', 'EA'],
+    ['education', 'Education & Certifications', 'EC'],
+    ['quality', 'Resume Quality', 'RQ'],
 ]
 
 const textOf = (value) => {
@@ -119,9 +121,17 @@ function ScoreSidebar({ report, isDirty, saving, saveError, saveSuccess, onSave 
     </aside>
 }
 
+function DownloadIcon() {
+    return <svg className='download-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' focusable='false'>
+        <path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' />
+        <polyline points='7 10 12 15 17 10' />
+        <line x1='12' y1='15' x2='12' y2='3' />
+    </svg>
+}
+
 export default function Interview() {
     const { interviewId } = useParams()
-    const { report: rawReport, loading, getResumePdf, saveConfirmedSkills, removeReport } = useInterview()
+    const { report: rawReport, loading, reportLoading, reportError, identityReady, getReportById, getResumePdf, saveConfirmedSkills } = useInterview()
     const report = useMemo(() => adaptInterviewReport(rawReport), [rawReport])
     const [activeSection, setActiveSection] = useState('summary')
     const [selectedSkills, setSelectedSkills] = useState(new Set())
@@ -131,53 +141,31 @@ export default function Interview() {
     const resumeGenerationLock = useRef(false)
     const [saveError, setSaveError] = useState('')
     const [saveSuccess, setSaveSuccess] = useState(false)
-    const [reportMenuOpen, setReportMenuOpen] = useState(false)
-    const [deletingReport, setDeletingReport] = useState(false)
-    const [deleteError, setDeleteError] = useState('')
-    const reportMenuRef = useRef(null)
-    const reportMenuButtonRef = useRef(null)
+    const [layoutWidth, setLayoutWidth] = useState(null)
+    const pageRef = useRef(null)
     const navigate = useNavigate()
+    const hasReport = Boolean(report)
+    useLayoutEffect(() => {
+        return observeInterviewPageWidth(hasReport ? pageRef.current : null, setLayoutWidth)
+    }, [hasReport])
     const savedSkills = useMemo(() => new Set(report?.confirmedSkills.map(skill => skill.normalizedName.toLowerCase()) || []), [report])
     useEffect(() => {
         if (report) setSelectedSkills(new Set(report.confirmedSkills.map(skill => skill.normalizedName.toLowerCase())))
         setSaveError('')
         setSaveSuccess(false)
     }, [report])
-    useEffect(() => {
-        if (!reportMenuOpen) return undefined
-        const menuItems = () => reportMenuRef.current ? [...reportMenuRef.current.querySelectorAll('[role="menuitem"]')].filter(item => !item.disabled) : []
-        const onKeyDown = (event) => {
-            if (event.key === 'Escape') { setReportMenuOpen(false); reportMenuButtonRef.current?.focus(); return }
-            if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-                const items = menuItems()
-                if (!items.length) return
-                const current = items.indexOf(document.activeElement)
-                const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length
-                event.preventDefault()
-                items[next].focus()
-                return
-            }
-        }
-        const onPointerDown = (event) => {
-            if (!reportMenuRef.current?.contains(event.target) && !reportMenuButtonRef.current?.contains(event.target)) setReportMenuOpen(false)
-        }
-        document.addEventListener('keydown', onKeyDown)
-        document.addEventListener('pointerdown', onPointerDown)
-        menuItems()[0]?.focus()
-        return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('pointerdown', onPointerDown) }
-    }, [reportMenuOpen])
-    if (!report) return <main className='loading-screen'><h1>Loading your resume analysis...</h1></main>
+    if (!report) {
+        if (reportError === 'not-found') return <main className='report-load-state' role='alert'><h1>Resume analysis not found</h1><p>This report may have been removed or may no longer be available.</p><button className='button primary-button' type='button' onClick={() => navigate('/')}>Back to reports</button></main>
+        if (reportError === 'unauthorized') return <main className='report-load-state' role='alert'><h1>Your session has expired</h1><p>Sign in again to open this resume analysis.</p><button className='button primary-button' type='button' onClick={() => navigate('/login')}>Sign in</button></main>
+        if (reportError === 'unavailable') return <main className='report-load-state' role='alert'><h1>Unable to load your resume analysis</h1><p>Check your connection and try again.</p><button className='button primary-button' type='button' onClick={() => { void getReportById(interviewId) }}>Retry loading report</button></main>
+        return <main className='report-load-state' role='status' aria-live='polite' aria-busy={reportLoading || !identityReady}><h1>Loading your resume analysis...</h1></main>
+    }
     const requirementsByCategory = (category) => report.requirements.filter((item) => item.scoringCategory === category || item.category === category)
     const isDirty = selectedSkills.size !== savedSkills.size || Array.from(selectedSkills).some(skill => !savedSkills.has(skill))
     const toggleSkill = (skill) => setSelectedSkills(previous => { const next = new Set(previous); const key = skill.toLowerCase(); if (next.has(key)) next.delete(key); else next.add(key); return next })
     const saveSkills = async () => {
         setSavingSkills(true); setSaveError(''); setSaveSuccess(false)
         try { await saveConfirmedSkills(interviewId, Array.from(selectedSkills)); setSaveSuccess(true) } catch { setSaveError('Unable to save changes. Please try again.') } finally { setSavingSkills(false) }
-    }
-    const deleteCurrentReport = async () => {
-        if (deletingReport) return
-        setDeletingReport(true); setDeleteError('')
-        try { await removeReport(interviewId); navigate('/') } catch { setDeleteError('Unable to delete this report. Please try again.') } finally { setDeletingReport(false) }
     }
     const downloadIdealResume = async () => {
         if (resumeGenerationLock.current) return
@@ -194,10 +182,12 @@ export default function Interview() {
         }
     }
     const section = { summary: <SummarySection report={report} />, skills: <SkillsSection report={report} selectedSkills={selectedSkills} onToggle={toggleSkill} />, experience: <DetailSection title='Experience alignment' body={report.experienceAlignment} requirements={requirementsByCategory('relevantProfessionalExperience')} />, education: <DetailSection title='Education & certifications' body={report.educationCertificationAnalysis} requirements={requirementsByCategory('educationAndCertifications')} />, quality: <DetailSection title='Resume quality' body={report.resumeQualityAnalysis} /> }[activeSection]
-    return <main className='interview-page' aria-busy={loading}><div className='interview-layout'>
-        <nav className='interview-nav' aria-label='Resume analysis sections'><div><div className='nav-heading'><span className='nav-heading__title'>Resume Analysis</span></div><div className='nav-items'>{NAV_ITEMS.map(([id, label]) => <button className={'interview-nav__item' + (activeSection === id ? ' interview-nav__item--active' : '')} key={id} type='button' onClick={() => setActiveSection(id)}><span>{label}</span></button>)}</div></div><div className='nav-actions'><button className='button primary-button' type='button' disabled={generatingResume} onClick={downloadIdealResume}>{generatingResume && <span className='button-spinner' aria-hidden='true' />}{generatingResume ? 'Generating…' : 'Download Ideal Resume'}</button>{generatingResume && <p className='download-status' role='status'>Generating your Ideal Resume. This usually takes a few seconds.</p>}{resumeDownloadError && <p className='download-status download-status--error' role='alert'>{resumeDownloadError}</p>}</div></nav>
+    const layoutMode = getInterviewLayoutMode(layoutWidth)
+    const isCompactNavigation = layoutMode === 'compact'
+    return <main ref={pageRef} className={`interview-page interview-page--${layoutMode}${isCompactNavigation ? ' interview-page--nav-collapsed' : ''}`} aria-busy={loading}><NetworkParticleBackground /><div className='interview-layout'>
+        <nav className='interview-nav' aria-label='Resume analysis sections'><div><div className='nav-heading'><span className='nav-heading__title'>Resume Analysis</span></div><div className='nav-items'>{NAV_ITEMS.map(([id, label, shortLabel]) => <button className={'interview-nav__item' + (activeSection === id ? ' interview-nav__item--active' : '')} key={id} type='button' aria-label={label} title={isCompactNavigation ? label : undefined} onClick={() => setActiveSection(id)}><span className='interview-nav__item-icon' aria-hidden='true'>{shortLabel}</span><span className='interview-nav__item-label'>{label}</span></button>)}</div></div><div className='nav-actions'><button className='button primary-button' type='button' aria-label='Download Ideal Resume' title={isCompactNavigation ? 'Download Ideal Resume' : undefined} disabled={generatingResume} onClick={downloadIdealResume}>{isCompactNavigation && !generatingResume ? <DownloadIcon /> : <>{generatingResume && <span className='button-spinner' aria-hidden='true' />}<span className='nav-action-label'>{generatingResume ? 'Generating…' : 'Download Ideal Resume'}</span></>}</button>{generatingResume && <p className='download-status' role='status'>Generating your Ideal Resume. This usually takes a few seconds.</p>}{resumeDownloadError && <p className='download-status download-status--error' role='alert'>{resumeDownloadError}</p>}</div></nav>
         <div className='interview-divider' />
-        <section className='interview-content'><header className='content-header'><div><p className='eyebrow'>Candidate report</p><h1>{NAV_ITEMS.find(([id]) => id === activeSection)?.[1]}</h1></div><div className='report-header-actions'><span className='content-header__status'>{report.analysisVersion || 'Legacy report'}</span><button ref={reportMenuButtonRef} className='report-menu-button' type='button' aria-label='Report actions' aria-expanded={reportMenuOpen} onClick={() => setReportMenuOpen(open => !open)}>⋯</button>{reportMenuOpen && <div ref={reportMenuRef} className='report-menu report-menu--header' role='menu'><button type='button' role='menuitem' disabled={deletingReport} onClick={() => { if (window.confirm(`Delete “${report.title || 'Untitled Position'}”?`)) deleteCurrentReport() }}>Delete</button></div>}{deleteError && <p className='download-status download-status--error' role='alert'>{deleteError}</p>}</div></header>{section}</section>
+        <section className='interview-content'><header className='content-header'><div><p className='eyebrow'>Candidate report</p><h1>{NAV_ITEMS.find(([id]) => id === activeSection)?.[1]}</h1></div></header>{section}</section>
         <div className='interview-divider' /><ScoreSidebar report={report} isDirty={isDirty} saving={savingSkills} saveError={saveError} saveSuccess={saveSuccess} onSave={saveSkills} />
     </div></main>
 }

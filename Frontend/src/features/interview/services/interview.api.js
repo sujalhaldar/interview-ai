@@ -1,7 +1,8 @@
 import axios from "axios";
 import { createSseParser } from "./interview.sse.js"
 import { getExpectedUserId } from "../../auth/session.identity.js"
-const api = axios.create({ baseURL: "http://localhost:3000", withCredentials: true })
+import { API_BASE_URL } from "../../../config/api.js"
+const api = axios.create({ baseURL: API_BASE_URL, withCredentials: true })
 api.interceptors.request.use(config => {
     const userId = getExpectedUserId()
     if (!userId) return Promise.reject(Object.assign(new Error("Authentication session is changing."), { code: "AUTH_TRANSITION" }))
@@ -16,7 +17,7 @@ export const generateInterviewReport = async ({ jobDescription, selfDescription,
     formData.append("jobDescription", jobDescription)
     formData.append("selfDescription", selfDescription)
     formData.append("resume", resumeFile)
-    const response = await fetch(`${api.defaults.baseURL}/api/interview/`, { method: "POST", body: formData, credentials: "include", headers: { Accept: "text/event-stream", "Idempotency-Key": idempotencyKey, ...(expectedUserId ? { "X-Expected-User-Id": expectedUserId } : {}) } })
+    const response = await fetch(`${API_BASE_URL}/api/interview/`, { method: "POST", body: formData, credentials: "include", headers: { Accept: "text/event-stream", "Idempotency-Key": idempotencyKey, ...(expectedUserId ? { "X-Expected-User-Id": expectedUserId } : {}) } })
     if (!response.ok) {
         let body = {}
         try { body = await response.json() } catch { /* non-JSON response */ }

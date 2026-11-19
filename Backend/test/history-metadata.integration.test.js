@@ -19,7 +19,7 @@ test.before(async () => { server = await MongoMemoryServer.create({ instance: { 
 test.after(async () => { await mongoose.disconnect(); await server.stop() })
 test.beforeEach(async () => { await report.deleteMany({}) })
 
-test("history sorts pinned first, then by the effective unpinned open date", async () => {
+test("history sorts pinned by pin date, then recent reports by creation date", async () => {
     const pinnedOld = await create({ title: "Pinned old", isPinned: true, pinnedAt: new Date("2026-01-01"), createdAt: new Date("2026-01-05") })
     const pinnedNew = await create({ title: "Pinned new", isPinned: true, pinnedAt: new Date("2026-02-01"), createdAt: new Date("2026-02-05") })
     const unpinnedOld = await create({ title: "Unpinned old", lastOpenedAt: new Date("2026-01-10"), createdAt: new Date("2026-03-01") })
@@ -28,7 +28,7 @@ test("history sorts pinned first, then by the effective unpinned open date", asy
     await report.create({ user: other, jobDescription: "Other", title: "Other", analysisVersion: "2.0" })
     const response = await auth(request(app).get("/api/interview/"), owner)
     assert.equal(response.status, 200)
-    assert.deepEqual(response.body.interviewReports.map(item => item.title), [pinnedNew.title, pinnedOld.title, "Historical", unpinnedNew.title, unpinnedOld.title])
+    assert.deepEqual(response.body.interviewReports.map(item => item.title), [pinnedNew.title, pinnedOld.title, "Historical", unpinnedOld.title, unpinnedNew.title])
     assert.equal(response.body.interviewReports.some(item => item.jobDescription), false)
 })
 

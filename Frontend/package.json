@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test test/interview.sse.test.js test/auth-session-isolation.test.js test/google-auth.test.js",
+    "test": "node --test test/interview.sse.test.js test/auth-session-isolation.test.js test/google-auth.test.js test/report-detail-loading.test.js test/interview-layout-mode.test.js test/api-base-url.test.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
