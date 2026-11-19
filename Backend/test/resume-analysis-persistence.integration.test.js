@@ -14,6 +14,7 @@ test.before(async () => {
         instance: { dbName: `interview-ai-test-${Date.now()}` }
     })
     await mongoose.connect(mongoServer.getUri())
+    await analysisIdempotencyModel.init()
     ownerId = new mongoose.Types.ObjectId()
     otherUserId = new mongoose.Types.ObjectId()
 })

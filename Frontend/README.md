@@ -45,7 +45,7 @@ Backend/
   Gemini service, MongoDB configuration, résumé upload and PDF generation
 ```
 
-The frontend runs on port `5173` and calls the backend at `http://localhost:3000`. The backend applies CORS for that local frontend origin and stores users, blacklisted tokens, and interview reports in MongoDB.
+The frontend runs on port `5173` and calls the backend at `http://localhost:3000` by default. Set the Vite variable `VITE_API_BASE_URL` to the deployed backend origin for production builds (for example, `https://api.example.com`; use your actual deployment origin). The backend applies CORS for the configured frontend origin and stores users, blacklisted tokens, and interview reports in MongoDB.
 
 ## Prerequisites
 
