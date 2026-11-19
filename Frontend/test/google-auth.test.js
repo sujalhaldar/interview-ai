@@ -6,6 +6,7 @@ const api = fs.readFileSync(new URL('../src/features/auth/services/auth.api.js',
 const auth = fs.readFileSync(new URL('../src/features/auth/hooks/useAuth.js', import.meta.url), 'utf8')
 const login = fs.readFileSync(new URL('../src/features/auth/pages/Login.jsx', import.meta.url), 'utf8')
 const home = fs.readFileSync(new URL('../src/features/interview/pages/Home.jsx', import.meta.url), 'utf8')
+const shell = fs.readFileSync(new URL('../src/features/auth/components/AuthenticatedShell.jsx', import.meta.url), 'utf8')
 
 test('Google auth posts the GIS credential to the backend endpoint', () => {
     assert.match(api, /post\("\/api\/auth\/google", \{ idToken \}\)/)
@@ -29,8 +30,12 @@ test('Google auth does not persist provider or application tokens', () => {
     assert.match(login, /google\.accounts\.id\.initialize/)
 })
 
-test('authenticated homepage exposes guarded logout navigation', () => {
-    assert.match(home, /handleLogout/)
-    assert.match(home, /navigate\('\/login', \{ replace: true \}\)/)
-    assert.match(home, /if \(logoutPending\) return/)
+test('authenticated homepage keeps account actions in the sidebar', () => {
+    assert.doesNotMatch(home, /account-bar|account-name|logout-button|>Logout</)
+    assert.match(home, /Give Your <span className='highlight'>Potential<\/span> a Place\./)
+    assert.match(home, /Discover your strengths, understand your opportunities, and shape your resume for what comes next\./)
+    assert.match(home, /Target Job Description/)
+    assert.match(home, /Upload Your Resume/)
+    assert.match(shell, /Log out/)
+    assert.match(shell, /handleLogout/)
 })

@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react'
 import "../style/home.scss"
 import { useInterview } from '../hooks/useInterview.js'
 import { useNavigate } from 'react-router'
-import { useAuth } from '../../auth/hooks/useAuth'
 import NetworkParticleBackground from '../../auth/components/NetworkParticleBackground'
 
 const Home = () => {
@@ -10,7 +9,6 @@ const Home = () => {
     // Analysis history now lives in AuthenticatedShell (formerly "Loading recent analyses" / "Your Recent Resume Analyses").
 
     const { analysisLoading, analysisProgress, generateReport } = useInterview()
-    const { user, handleLogout } = useAuth()
     const [ jobDescription, setJobDescription ] = useState("")
     const [ selfDescription, setSelfDescription ] = useState("")
     const [ resumeFile, setResumeFile ] = useState(null)
@@ -18,20 +16,8 @@ const Home = () => {
     const [ fieldErrors, setFieldErrors ] = useState({ jobDescription: '', resume: '' })
     const resumeInputRef = useRef()
     const idempotencyKeyRef = useRef(null)
-    const [logoutPending, setLogoutPending] = useState(false)
-    const [logoutError, setLogoutError] = useState('')
 
     const navigate = useNavigate()
-
-    const submitLogout = async () => {
-        if (logoutPending) return
-        setLogoutPending(true)
-        setLogoutError('')
-        const result = await handleLogout()
-        if (result?.success) navigate('/login', { replace: true })
-        else setLogoutError('Unable to sign out. Please try again.')
-        setLogoutPending(false)
-    }
 
     const handleGenerateReport = async () => {
         if (analysisLoading) return
@@ -94,17 +80,9 @@ const Home = () => {
 
             {/* Page Header */}
             <header className='page-header'>
-                <div className='account-bar'>
-                    <span className='account-name'>{user?.username || user?.email}</span>
-                    <button type='button' className='logout-button' onClick={submitLogout} disabled={logoutPending}>
-                        {logoutPending ? 'Signing out…' : 'Logout'}
-                    </button>
-                </div>
                 <h1>Give Your <span className='highlight'>Potential</span> a Place.</h1>
                 <p>Discover your strengths, understand your opportunities, and shape your resume for what comes next.</p>
             </header>
-            {logoutError && <p className='submission-error' role='alert'>{logoutError}</p>}
-
             {/* Main Card */}
             <div className='interview-card'>
                 <div className='interview-card__body'>
