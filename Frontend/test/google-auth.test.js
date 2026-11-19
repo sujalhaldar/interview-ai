@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 
 const api = fs.readFileSync(new URL('../src/features/auth/services/auth.api.js', import.meta.url), 'utf8')
-const auth = fs.readFileSync(new URL('../src/features/auth/hooks/useAuth.js', import.meta.url), 'utf8')
+const auth = fs.readFileSync(new URL('../src/features/auth/auth.context.jsx', import.meta.url), 'utf8')
 const login = fs.readFileSync(new URL('../src/features/auth/pages/Login.jsx', import.meta.url), 'utf8')
 const home = fs.readFileSync(new URL('../src/features/interview/pages/Home.jsx', import.meta.url), 'utf8')
 const shell = fs.readFileSync(new URL('../src/features/auth/components/AuthenticatedShell.jsx', import.meta.url), 'utf8')

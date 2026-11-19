@@ -17,7 +17,7 @@ test('Google authentication remains the only login UI and reports errors', () =>
     assert.doesNotMatch(loginPage, /type="password"|handleLogin|\/register/)
     assert.match(loginPage, /google\.accounts\.id\.initialize/)
     assert.match(loginPage, /role='alert'/)
-    assert.match(authHook, /return \{ success: false, error: err \}/)
+    assert.match(authContext, /return \{ success: false, error: err \}/)
 })
 
 test('identity transitions clear user-scoped interview state', () => {
@@ -29,10 +29,10 @@ test('identity transitions clear user-scoped interview state', () => {
 })
 
 test('cross-tab identity signals invalidate before current-user resolution', () => {
-    assert.match(authHook, /announcedUserId\) \{ setExpectedUserId\(null\); setUser\(null\) \}/)
-    assert.match(authHook, /resolveCurrentUser\(generation\)/)
-    assert.match(authHook, /window\.addEventListener\('storage'/)
-    assert.match(authHook, /setExpectedUserId\(null\); setUser\(null\)/)
+    assert.match(authContext, /const nextUserId = announcedUserId \|\| null/)
+    assert.match(authContext, /setExpectedUserId\(null\)\s*setUser\(null\)/)
+    assert.match(authContext, /resolveCurrentUser\(generation\)/)
+    assert.match(authContext, /window\.addEventListener\('storage'/)
 })
 
 test('history and detail responses require the captured identity and generation', () => {
@@ -85,26 +85,39 @@ test('history loading is separate from explicit analysis progress loading', () =
 })
 
 test('logout completions are protected from newer identity transitions', () => {
-    assert.match(authHook, /const handleLogout = useCallback\(async \(\) => \{\s*const generation = beginTransition\(\)/s)
-    assert.match(authHook, /await logout\(\)\s*if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}/s)
-    assert.match(authHook, /if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}\s*setUser\(null\)\s*setExpectedUserId\(null\)\s*broadcastAuthChange\(null\)/s)
-    assert.match(authHook, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/s)
+    assert.match(authContext, /const handleLogout = useCallback\(async \(\) => \{\s*const generation = beginTransition\(\)/s)
+    assert.match(authContext, /await logout\(\)\s*if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}/s)
+    assert.match(authContext, /if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}\s*setUser\(null\)\s*setExpectedUserId\(null\)\s*broadcastAuthChange\(null\)/s)
+    assert.match(authContext, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/s)
 })
 
 test('all auth consumers share one provider-owned transition generation', () => {
     assert.match(authContext, /const transitionGeneration = useRef\(0\)/)
     assert.match(authContext, /const beginTransition = useCallback\(\(\) => \{\s*transitionGeneration\.current \+= 1/s)
     assert.match(authContext, /const isCurrentTransition = useCallback\(generation => generation === transitionGeneration\.current/s)
-    assert.match(authContext, /value=\{\{user,setUser,loading,setLoading,beginTransition,isCurrentTransition\}\}/)
-    assert.match(authHook, /const \{ user, setUser, loading, setLoading, beginTransition, isCurrentTransition \} = context/)
+    assert.match(authContext, /value=\{\{ user, setUser, loading, setLoading, beginTransition, isCurrentTransition, revalidateCurrentUser, handleGoogleLogin, handleLogout \}\}/)
+    assert.match(authHook, /useContext\(AuthContext\)/)
     assert.doesNotMatch(authHook, /const transitionGeneration = useRef\(0\)/)
 })
 
+test('AuthProvider owns the single authentication bootstrap lifecycle', () => {
+    assert.match(authContext, /useEffect/)
+    assert.match(authContext, /getMe\(\)/)
+    assert.match(authContext, /window\.addEventListener\(AUTH_EVENT_KEY, handleIdentitySignal\)/)
+    assert.match(authContext, /const initializationStarted = useRef\(false\)/)
+    assert.match(authContext, /handleGoogleLogin/)
+    assert.match(authContext, /handleLogout/)
+    assert.doesNotMatch(authHook, /useEffect/)
+    assert.doesNotMatch(authHook, /getMe\(\)/)
+    assert.doesNotMatch(authHook, /addEventListener/)
+    assert.doesNotMatch(authHook, /user\?\.id/)
+})
+
 test('stale login and get-me completions cannot update shared auth state', () => {
-    assert.match(authHook, /const generation = beginTransition\(\)/)
-    assert.match(authHook, /if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}/s)
-    assert.match(authHook, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/s)
-    assert.match(authHook, /if \(!isCurrentTransition\(generation\)\) return/s)
+    assert.match(authContext, /const generation = beginTransition\(\)/)
+    assert.match(authContext, /if \(!isCurrentTransition\(generation\)\) return \{ success: false, error: \{ code: "STALE_AUTH_TRANSITION" \} \}/s)
+    assert.match(authContext, /if \(isCurrentTransition\(generation\)\) setLoading\(false\)/s)
+    assert.match(authContext, /if \(!isCurrentTransition\(generation\)\) return/s)
 })
 
 test('report opening keeps retrieval read-only and best-effort tracks last opened time', () => {
