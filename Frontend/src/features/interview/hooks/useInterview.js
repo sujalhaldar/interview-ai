@@ -1,7 +1,8 @@
-import { getAllInterviewReports, generateInterviewReport, getInterviewReportById, markReportOpened, generateResumePdf, updateConfirmedSkills, updateReportTitle, updateReportPin, deleteInterviewReport } from "../services/interview.api"
+import { generateInterviewReport, getInterviewReportById, markReportOpened, generateResumePdf, updateConfirmedSkills, updateReportTitle, updateReportPin, deleteInterviewReport } from "../services/interview.api"
 import { useCallback, useContext, useEffect, useRef } from "react"
 import { InterviewContext } from "../interview.context"
 import { useParams } from "react-router"
+import { runReportDetailRequest } from "../report-detail.lifecycle.js"
 
 
 export const useInterview = () => {
@@ -13,17 +14,15 @@ export const useInterview = () => {
         throw new Error("useInterview must be used within an InterviewProvider")
     }
 
-    const { loading, setLoading, analysisLoading, setAnalysisLoading, historyLoading, setHistoryLoading, analysisProgress, setAnalysisProgress, report, setReport, reports, setReports, reportsError, setReportsError, user, sessionGeneration } = context
-    const historyRequestGeneration = useRef(0)
+    const { loading, setLoading, analysisLoading, setAnalysisLoading, historyLoading, analysisProgress, setAnalysisProgress, report, setReport, reportLoading, setReportLoading, reportError, setReportError, reports, setReports, reportsError, user, sessionGeneration, identityReady, refreshReports } = context
     const detailRequestGeneration = useRef(0)
-    const historyRefreshError = useRef(null)
+    const activeDetailRequest = useRef(null)
     const identityRef = useRef({ userId: user?.id || null, sessionGeneration })
     if (identityRef.current.userId !== (user?.id || null) || identityRef.current.sessionGeneration !== sessionGeneration) {
         identityRef.current = { userId: user?.id || null, sessionGeneration }
     }
     useEffect(() => {
         identityRef.current = { userId: user?.id || null, sessionGeneration }
-        historyRequestGeneration.current += 1
     }, [ user?.id, sessionGeneration ])
 
     const generateReport = async ({ jobDescription, selfDescription, resumeFile, idempotencyKey }) => {
@@ -32,6 +31,7 @@ export const useInterview = () => {
         try {
             const response = await generateInterviewReport({ jobDescription, selfDescription, resumeFile, idempotencyKey, onProgress: setAnalysisProgress })
             setReport(response.interviewReport)
+            await refreshReports({ silent: true })
             return response.interviewReport
         } finally {
             setAnalysisLoading(false)
@@ -39,50 +39,31 @@ export const useInterview = () => {
         }
     }
 
-    const getReportById = useCallback(async (interviewId) => {
-        const requestGeneration = ++detailRequestGeneration.current
+    const getReportById = useCallback((interviewId) => {
         const requestIdentity = identityRef.current
-        setLoading(true)
-        try {
-            const response = await getInterviewReportById(interviewId)
-            const currentIdentity = identityRef.current
-            if (requestGeneration === detailRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) setReport(response.interviewReport)
-            try { await markReportOpened(interviewId) } catch { /* report retrieval remains usable if metadata tracking fails */ }
-            return response.interviewReport
-        } catch (error) {
-            const currentIdentity = identityRef.current
-            if (requestGeneration === detailRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) setReport(null)
-            throw error
-        } finally {
-            if (requestGeneration === detailRequestGeneration.current && identityRef.current.userId === requestIdentity.userId && identityRef.current.sessionGeneration === requestIdentity.sessionGeneration) setLoading(false)
-        }
-    }, [ setLoading, setReport ])
+        if (!identityReady || !requestIdentity.userId) return Promise.resolve(null)
+        const requestKey = `${interviewId}:${requestIdentity.userId}:${requestIdentity.sessionGeneration}`
+        if (activeDetailRequest.current?.key === requestKey) return activeDetailRequest.current.promise
 
-    const getReports = useCallback(async ({ silent = false } = {}) => {
-        const requestGeneration = ++historyRequestGeneration.current
-        const requestIdentity = identityRef.current
-        historyRefreshError.current = null
-        if (!silent) { setLoading(true); setHistoryLoading(true) }
-        setReportsError('')
-        let response = null
-        try {
-            response = await getAllInterviewReports()
-            const currentIdentity = identityRef.current
-            if (requestGeneration === historyRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) setReports(response.interviewReports)
-            if (requestGeneration === historyRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) historyRefreshError.current = null
-            return response.interviewReports
-        } catch (error) {
-            console.log(error)
-            const currentIdentity = identityRef.current
-            if (requestGeneration === historyRequestGeneration.current && currentIdentity.userId === requestIdentity.userId && currentIdentity.sessionGeneration === requestIdentity.sessionGeneration) {
-                historyRefreshError.current = error
-                setReportsError(error?.response?.data?.message || 'Unable to refresh your recent analyses.')
-            }
-            return []
-        } finally {
-            if (!silent && requestGeneration === historyRequestGeneration.current && identityRef.current.userId === requestIdentity.userId && identityRef.current.sessionGeneration === requestIdentity.sessionGeneration) { setLoading(false); setHistoryLoading(false) }
-        }
-    }, [ setHistoryLoading, setLoading, setReports, setReportsError ])
+        const requestGeneration = ++detailRequestGeneration.current
+        const isCurrent = () => requestGeneration === detailRequestGeneration.current && identityRef.current.userId === requestIdentity.userId && identityRef.current.sessionGeneration === requestIdentity.sessionGeneration
+        setReport(null)
+        setReportError(null)
+        setReportLoading(true)
+        const request = runReportDetailRequest({
+            load: async () => (await getInterviewReportById(interviewId)).interviewReport,
+            markOpened: () => markReportOpened(interviewId),
+            isCurrent,
+            onSuccess: setReport,
+            onError: setReportError,
+            onSettled: () => setReportLoading(false),
+        })
+        const promise = request.finally(() => {
+            if (activeDetailRequest.current?.promise === promise) activeDetailRequest.current = null
+        })
+        activeDetailRequest.current = { key: requestKey, promise }
+        return promise
+    }, [ identityReady, setReport, setReportError, setReportLoading ])
 
     const getResumePdf = async (interviewReportId) => {
         setLoading(true)
@@ -122,8 +103,8 @@ export const useInterview = () => {
 
     const pinReport = async (interviewReportId, isPinned) => {
         const response = await updateReportPin({ interviewReportId, isPinned })
-        await getReports({ silent: true })
-        return { interviewReport: response.interviewReport, historyRefreshError: historyRefreshError.current }
+        await refreshReports({ silent: true })
+        return { interviewReport: response.interviewReport }
     }
 
     const removeReport = async (interviewReportId) => {
@@ -133,12 +114,18 @@ export const useInterview = () => {
     }
 
     useEffect(() => {
-        if (interviewId) {
-            getReportById(interviewId)
+        if (!interviewId) return
+        if (!identityReady) {
+            detailRequestGeneration.current += 1
+            activeDetailRequest.current = null
+            setReportLoading(false)
+            setReport(null)
+            setReportError(null)
+            return
         }
-        getReports()
-    }, [ interviewId, getReportById, getReports ])
+        void getReportById(interviewId)
+    }, [ interviewId, identityReady, sessionGeneration, getReportById, setReport, setReportError, setReportLoading ])
 
-    return { loading, analysisLoading, historyLoading, analysisProgress, report, reports, reportsError, generateReport, getReportById, getReports, getResumePdf, saveConfirmedSkills, renameReport, pinReport, removeReport }
+    return { loading, reportLoading, reportError, identityReady, analysisLoading, historyLoading, analysisProgress, report, reports, reportsError, generateReport, getReportById, getResumePdf, saveConfirmedSkills, renameReport, pinReport, removeReport }
 
 }

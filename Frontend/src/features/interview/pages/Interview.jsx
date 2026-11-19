@@ -121,7 +121,7 @@ function ScoreSidebar({ report, isDirty, saving, saveError, saveSuccess, onSave 
 
 export default function Interview() {
     const { interviewId } = useParams()
-    const { report: rawReport, loading, getResumePdf, saveConfirmedSkills, removeReport } = useInterview()
+    const { report: rawReport, loading, reportLoading, reportError, identityReady, getReportById, getResumePdf, saveConfirmedSkills, removeReport } = useInterview()
     const report = useMemo(() => adaptInterviewReport(rawReport), [rawReport])
     const [activeSection, setActiveSection] = useState('summary')
     const [selectedSkills, setSelectedSkills] = useState(new Set())
@@ -166,7 +166,12 @@ export default function Interview() {
         menuItems()[0]?.focus()
         return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('pointerdown', onPointerDown) }
     }, [reportMenuOpen])
-    if (!report) return <main className='loading-screen'><h1>Loading your resume analysis...</h1></main>
+    if (!report) {
+        if (reportError === 'not-found') return <main className='report-load-state' role='alert'><h1>Resume analysis not found</h1><p>This report may have been removed or may no longer be available.</p><button className='button primary-button' type='button' onClick={() => navigate('/')}>Back to reports</button></main>
+        if (reportError === 'unauthorized') return <main className='report-load-state' role='alert'><h1>Your session has expired</h1><p>Sign in again to open this resume analysis.</p><button className='button primary-button' type='button' onClick={() => navigate('/login')}>Sign in</button></main>
+        if (reportError === 'unavailable') return <main className='report-load-state' role='alert'><h1>Unable to load your resume analysis</h1><p>Check your connection and try again.</p><button className='button primary-button' type='button' onClick={() => { void getReportById(interviewId) }}>Retry loading report</button></main>
+        return <main className='report-load-state' role='status' aria-live='polite' aria-busy={reportLoading || !identityReady}><h1>Loading your resume analysis...</h1></main>
+    }
     const requirementsByCategory = (category) => report.requirements.filter((item) => item.scoringCategory === category || item.category === category)
     const isDirty = selectedSkills.size !== savedSkills.size || Array.from(selectedSkills).some(skill => !savedSkills.has(skill))
     const toggleSkill = (skill) => setSelectedSkills(previous => { const next = new Set(previous); const key = skill.toLowerCase(); if (next.has(key)) next.delete(key); else next.add(key); return next })

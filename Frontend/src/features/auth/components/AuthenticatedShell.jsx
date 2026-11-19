@@ -20,7 +20,7 @@ const AuthenticatedShell = ({ children }) => {
     const [accountOpen, setAccountOpen] = useState(false)
     const [logoutPending, setLogoutPending] = useState(false)
     const [reportMenu, setReportMenu] = useState(null)
-    const { historyLoading, reports, reportsError, user, setReports } = useContext(InterviewContext)
+    const { historyLoading, historyLoaded, reports, reportsError, user, setReports } = useContext(InterviewContext)
     const { handleLogout } = useAuth()
     const navigate = useNavigate()
     const location = useLocation()
@@ -153,10 +153,11 @@ const AuthenticatedShell = ({ children }) => {
                 </div>
                 {expanded && (
                     <div className='app-sidebar__history' aria-live='polite'>
-                        {historyLoading && <div className='app-sidebar__history-state'>Loading reports…</div>}
-                        {!historyLoading && reportsError && <div className='app-sidebar__history-state app-sidebar__history-state--error'>{reportsError}</div>}
-                        {!historyLoading && !reportsError && !reports.length && <div className='app-sidebar__history-state'>No reports yet</div>}
-                        {!historyLoading && !reportsError && reports.length > 0 && (
+                        {(historyLoading || !historyLoaded) && <div className='app-sidebar__history-state'>Loading reports…</div>}
+                        {!historyLoading && historyLoaded && reportsError && !reports.length && <div className='app-sidebar__history-state app-sidebar__history-state--error'>{reportsError}</div>}
+                        {!historyLoading && historyLoaded && reportsError && reports.length > 0 && <div className='app-sidebar__history-state app-sidebar__history-state--error'>{reportsError}</div>}
+                        {!historyLoading && historyLoaded && !reportsError && !reports.length && <div className='app-sidebar__history-state'>No reports yet</div>}
+                        {!historyLoading && historyLoaded && reports.length > 0 && (
                             <div className='app-sidebar__history-list'>
                                 {reports.map(report => (
                                     <div
