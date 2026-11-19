@@ -1,8 +1,8 @@
-import { generateInterviewReport, getInterviewReportById, markReportOpened, generateResumePdf, updateConfirmedSkills, updateReportTitle, updateReportPin, deleteInterviewReport } from "../services/interview.api"
 import { useCallback, useContext, useEffect, useRef } from "react"
 import { InterviewContext } from "../interview.context"
 import { useParams } from "react-router"
 import { runReportDetailRequest } from "../report-detail.lifecycle.js"
+import { generateInterviewReport, getInterviewReportById, markReportOpened, generateResumePdf, updateConfirmedSkills, updateReportTitle, deleteInterviewReport } from "../services/interview.api"
 
 
 export const useInterview = () => {
@@ -14,7 +14,7 @@ export const useInterview = () => {
         throw new Error("useInterview must be used within an InterviewProvider")
     }
 
-    const { loading, setLoading, analysisLoading, setAnalysisLoading, historyLoading, analysisProgress, setAnalysisProgress, report, setReport, reportLoading, setReportLoading, reportError, setReportError, reports, setReports, reportsError, user, sessionGeneration, identityReady, refreshReports } = context
+    const { loading, setLoading, analysisLoading, setAnalysisLoading, historyLoading, analysisProgress, setAnalysisProgress, report, setReport, reportLoading, setReportLoading, reportError, setReportError, reports, setReports, reportsError, user, sessionGeneration, identityReady, refreshReports, pinReport: pinReportMutation } = context
     const detailRequestGeneration = useRef(0)
     const activeDetailRequest = useRef(null)
     const identityRef = useRef({ userId: user?.id || null, sessionGeneration })
@@ -101,11 +101,7 @@ export const useInterview = () => {
         return response.interviewReport
     }
 
-    const pinReport = async (interviewReportId, isPinned) => {
-        const response = await updateReportPin({ interviewReportId, isPinned })
-        await refreshReports({ silent: true })
-        return { interviewReport: response.interviewReport }
-    }
+    const pinReport = async (interviewReportId, isPinned) => ({ interviewReport: await pinReportMutation(interviewReportId, isPinned) })
 
     const removeReport = async (interviewReportId) => {
         await deleteInterviewReport(interviewReportId)

@@ -1,6 +1,6 @@
 import { createContext,useCallback,useContext,useEffect,useRef,useState } from "react";
 import { AuthContext } from "../auth/auth.context";
-import { getAllInterviewReports } from "./services/interview.api";
+import { getAllInterviewReports, updateReportPin } from "./services/interview.api";
 import { isReportIdentityReady } from "./report-detail.lifecycle.js";
 
 
@@ -60,6 +60,12 @@ export const InterviewProvider = ({ children }) => {
         return request
     }, [ setHistoryLoading, setReports, setReportsError ])
 
+    const pinReport = useCallback(async (interviewReportId, isPinned) => {
+        const response = await updateReportPin({ interviewReportId, isPinned })
+        await refreshReports({ silent: true })
+        return response.interviewReport
+    }, [ refreshReports ])
+
     useEffect(() => {
         currentUserIdRef.current = currentUserId
     }, [ currentUserId ])
@@ -92,7 +98,7 @@ export const InterviewProvider = ({ children }) => {
     }, [ currentUserId, refreshReports ])
 
     return (
-        <InterviewContext.Provider value={{ loading, setLoading, analysisLoading, setAnalysisLoading, historyLoading, setHistoryLoading, historyLoaded, analysisProgress, setAnalysisProgress, report, setReport, reportLoading, setReportLoading, reportError, setReportError, reports, setReports, reportsError, setReportsError, refreshReports, user, sessionGeneration, identityReady }}>
+        <InterviewContext.Provider value={{ loading, setLoading, analysisLoading, setAnalysisLoading, historyLoading, setHistoryLoading, historyLoaded, analysisProgress, setAnalysisProgress, report, setReport, reportLoading, setReportLoading, reportError, setReportError, reports, setReports, reportsError, setReportsError, refreshReports, pinReport, user, sessionGeneration, identityReady }}>
             {children}
         </InterviewContext.Provider>
     )

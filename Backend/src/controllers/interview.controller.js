@@ -158,7 +158,7 @@ async function getAllInterviewReportsController(req, res) {
         { $match: { user } },
         { $addFields: {
             historyPinned: { $cond: [ { $eq: [ "$isPinned", true ] }, 0, 1 ] },
-            historyDate: { $cond: [ { $eq: [ "$isPinned", true ] }, "$pinnedAt", { $ifNull: [ "$lastOpenedAt", "$createdAt" ] } ] }
+            historyDate: { $cond: [ { $eq: [ "$isPinned", true ] }, "$pinnedAt", "$createdAt" ] }
         } },
         { $sort: { historyPinned: 1, historyDate: -1, createdAt: -1, _id: -1 } },
         { $project: { resume: 0, selfDescription: 0, jobDescription: 0, __v: 0, technicalQuestions: 0, behavioralQuestions: 0, skillGaps: 0, preparationPlan: 0, historyPinned: 0, historyDate: 0 } }

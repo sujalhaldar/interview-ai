@@ -113,6 +113,9 @@
 .app-sidebar__label { padding: 0 .35rem; color: #858585; font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; }
 .app-sidebar__history { flex: 1 1 auto; min-width: 0; min-height: 0; margin-top: .25rem; overflow: hidden; }
 .app-sidebar__history-list { display: grid; align-content: start; gap: .3rem; height: 100%; margin-top: .55rem; overflow-y: auto; padding-right: .15rem; }
+.app-sidebar__history-section { display: grid; gap: .3rem; }
+.app-sidebar__history-section + .app-sidebar__history-section { margin-top: .85rem; }
+.app-sidebar__history-section-heading { margin: .25rem .6rem .1rem; color: #858585; font-size: .62rem; font-weight: 600; letter-spacing: .12em; }
 .app-sidebar__history-item {
     position: relative;
     display: grid;
@@ -219,6 +222,8 @@
 .app-sidebar__report-menu button:hover,
 .app-sidebar__report-menu button:focus-visible { background: #333; outline: none; }
 .app-sidebar__report-menu button:active { background: #494949; }
+.app-sidebar__report-menu button:disabled { cursor: wait; opacity: .65; }
+.app-sidebar__report-menu-error { padding: .35rem .5rem .2rem; color: #e57373; font-size: .7rem; line-height: 1.35; }
 .app-sidebar__report-menu svg { width: .9rem; height: .9rem; flex: 0 0 .9rem; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .app-sidebar__report-menu .is-destructive { color: #e57373; }
 .app-sidebar__account-menu button:hover,
@@ -245,6 +250,36 @@
 .app-sidebar__account-dialog > button { padding: .5rem .75rem; border: 1px solid #494949; border-radius: .45rem; color: #e5e5e5; background: transparent; cursor: pointer; }
 .app-sidebar__account-dialog > button:hover,
 .app-sidebar__account-dialog > button:focus-visible { background: #333; outline: none; }
+.app-sidebar__delete-dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 1rem; background: rgba(0, 0, 0, .62); }
+.app-sidebar__delete-dialog { width: min(26rem, 100%); padding: 1.25rem; border: 1px solid #494949; border-radius: .7rem; color: #e5e5e5; background: #202020; box-shadow: 0 1rem 2rem rgba(0, 0, 0, .45); }
+.app-sidebar__delete-dialog h2 { margin: 0; color: #e5e5e5; font-size: 1.05rem; }
+.app-sidebar__delete-dialog p { margin: .65rem 0 0; color: #a6a6a6; font-size: .82rem; line-height: 1.5; }
+.app-sidebar__delete-dialog p strong { color: #e5e5e5; font-weight: 600; overflow-wrap: anywhere; }
+.app-sidebar__delete-dialog-error { color: #e57373 !important; }
+.app-sidebar__delete-dialog-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.25rem; }
+.app-sidebar__delete-dialog-actions button { min-height: 2.25rem; padding: .5rem .75rem; border: 1px solid #494949; border-radius: .45rem; color: #e5e5e5; background: transparent; font: inherit; font-size: .78rem; cursor: pointer; }
+.app-sidebar__delete-dialog-actions button:hover,
+.app-sidebar__delete-dialog-actions button:focus-visible { border-color: #858585; background: #333; outline: none; }
+.app-sidebar__delete-dialog-actions button.is-destructive { border-color: #a44a4a; color: #fff; background: #8f3f3f; }
+.app-sidebar__delete-dialog-actions button.is-destructive:hover,
+.app-sidebar__delete-dialog-actions button.is-destructive:focus-visible { border-color: #e57373; background: #a94c4c; }
+.app-sidebar__delete-dialog-actions button:disabled { cursor: wait; opacity: .65; }
+.app-sidebar__rename-dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 1rem; background: rgba(0, 0, 0, .62); }
+.app-sidebar__rename-dialog { width: min(26rem, 100%); padding: 1.25rem; border: 1px solid #494949; border-radius: .7rem; color: #e5e5e5; background: #202020; box-shadow: 0 1rem 2rem rgba(0, 0, 0, .45); }
+.app-sidebar__rename-dialog h2 { margin: 0; color: #e5e5e5; font-size: 1.05rem; }
+.app-sidebar__rename-dialog > p { margin: .65rem 0 1rem; color: #a6a6a6; font-size: .82rem; line-height: 1.5; }
+.app-sidebar__rename-dialog label { display: block; margin-bottom: .35rem; color: #a6a6a6; font-size: .72rem; }
+.app-sidebar__rename-dialog input { display: block; width: 100%; box-sizing: border-box; min-height: 2.4rem; padding: .55rem .65rem; border: 1px solid #494949; border-radius: .45rem; color: #e5e5e5; background: #0b0b0b; font: inherit; font-size: .82rem; }
+.app-sidebar__rename-dialog input:focus { border-color: #c0c0c0; outline: 2px solid rgba(192, 192, 192, .35); outline-offset: 1px; }
+.app-sidebar__rename-dialog-error { margin: .55rem 0 0 !important; color: #e57373 !important; }
+.app-sidebar__rename-dialog-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.25rem; }
+.app-sidebar__rename-dialog-actions button { min-height: 2.25rem; padding: .5rem .85rem; border: 1px solid #494949; border-radius: .45rem; color: #e5e5e5; background: transparent; font: inherit; font-size: .78rem; cursor: pointer; }
+.app-sidebar__rename-dialog-actions button:hover,
+.app-sidebar__rename-dialog-actions button:focus-visible { border-color: #858585; background: #333; outline: none; }
+.app-sidebar__rename-dialog-actions button.is-save { border-color: #c0c0c0; color: #090b0e; background: #c0c0c0; }
+.app-sidebar__rename-dialog-actions button.is-save:hover,
+.app-sidebar__rename-dialog-actions button.is-save:focus-visible { border-color: #e5e5e5; background: #e5e5e5; }
+.app-sidebar__rename-dialog-actions button:disabled { cursor: wait; opacity: .65; }
 .authenticated-shell__content { min-width: 0; }
 
 @media (max-width: 640px) {
