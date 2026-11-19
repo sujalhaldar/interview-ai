@@ -162,8 +162,8 @@ const Home = () => {
                             {fieldErrors.resume && <p className='field-error' role='alert'>{fieldErrors.resume}</p>}
                         </div>
 
-                        {/* OR Divider */}
-                        <div className='or-divider'><span>OR</span></div>
+                        {/* Section divider */}
+                        <div className='form-divider' aria-hidden='true' />
 
                         {/* Additional Background */}
                         <div className='self-description'>

@@ -291,25 +291,12 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
     }
 }
 
-// ── OR Divider ────────────────────────────────────────────────────────────────
-.or-divider {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: $text-muted;
-    font-size: 0.75rem;
-
-    &::before,
-    &::after {
-        content: '';
-        flex: 1;
-        height: 1px;
-        background-color: $border-color;
-    }
-
-    span {
-        white-space: nowrap;
-    }
+// ── Form Divider ─────────────────────────────────────────────────────────────
+.form-divider {
+    width: 100%;
+    height: 1px;
+    margin: 0.75rem 0;
+    background-color: $border-color;
 }
 
 // ── Self Description ──────────────────────────────────────────────────────────
