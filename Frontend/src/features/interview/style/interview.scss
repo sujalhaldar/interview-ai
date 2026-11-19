@@ -1,18 +1,20 @@
-// ── Shared Variables (mirrors home.scss theme) ────────────────────────────────
-$bg-page: #0d1117;
-$bg-card: #161b22;
-$bg-panel: #1c2230;
-$bg-input: #1e2535;
-$border-color: #2a3348;
-$text-primary: #e6edf3;
-$text-muted: #7d8590;
-$accent: #ff2d78;
+// ── AlmaCV Graphite & Silver tokens ──────────────────────────────────────────
+$bg-page: #000000;
+$bg-card: #171717;
+$bg-panel: #202020;
+$bg-input: #0b0b0b;
+$border-color: #494949;
+$separator-color: #333333;
+$text-primary: #e5e5e5;
+$text-muted: #a6a6a6;
+$accent: #c0c0c0;
+$accent-alt: #858585;
 $font-stack: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-// severity palette
-$severity-high: #ff4d4d;
-$severity-medium: #f5a623;
-$severity-low: #3fb950;
+// Statuses retain their semantic classes while using the monochrome palette.
+$severity-high: #c0c0c0;
+$severity-medium: #a6a6a6;
+$severity-low: #e5e5e5;
 
 *::-webkit-scrollbar {
     display: none;
@@ -33,10 +35,12 @@ $severity-low: #3fb950;
 }
 
 .interview-page {
+    position: relative;
+    isolation: isolate;
     width: 100%;
     height: 100dvh;
     min-height: 0;
-    background-color: $bg-page;
+    background-color: transparent;
     color: $text-primary;
     font-family: $font-stack;
     display: flex;
@@ -44,6 +48,20 @@ $severity-low: #3fb950;
     padding: 1.5rem clamp(1rem, 2.5vw, 2.5rem);
     box-sizing: border-box;
     overflow: hidden;
+}
+
+.interview-page > :not(.auth-network-canvas) {
+    position: relative;
+    z-index: 1;
+}
+
+.interview-page .auth-network-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
 }
 
 // ── 3-Column Layout ───────────────────────────────────────────────────────────
@@ -116,7 +134,7 @@ $severity-low: #3fb950;
         }
 
         &--active {
-            background-color: rgba($accent, 0.1);
+            background-color: rgba($accent, 0.12);
             color: $accent;
 
             .interview-nav__icon svg {
@@ -274,15 +292,15 @@ $severity-low: #3fb950;
         width: fit-content;
 
         &--intention {
-            color: #a78bfa;
-            background-color: rgba(#a78bfa, 0.1);
-            border: 1px solid rgba(#a78bfa, 0.2);
+            color: $accent;
+            background-color: rgba($accent, 0.1);
+            border: 1px solid rgba($accent, 0.25);
         }
 
         &--answer {
-            color: #3fb950;
-            background-color: rgba(#3fb950, 0.1);
-            border: 1px solid rgba(#3fb950, 0.2);
+            color: $accent-alt;
+            background-color: rgba($accent-alt, 0.12);
+            border: 1px solid rgba($accent-alt, 0.28);
         }
     }
 }
@@ -413,6 +431,14 @@ $severity-low: #3fb950;
 
 .nav-items { display: grid; gap: 0.25rem; padding-top: 1rem; }
 .nav-actions { display: grid; gap: 0.6rem; margin-top: 1.5rem; }
+.interview-page .nav-actions .primary-button {
+    background-color: $accent;
+    color: #000000;
+}
+.interview-page .nav-actions .primary-button:hover { background-color: $text-primary; }
+.interview-page .nav-actions .primary-button:focus-visible { outline: 2px solid $text-primary; outline-offset: 2px; }
+.interview-page .nav-actions .primary-button:active { background-color: $accent-alt; }
+.interview-page .nav-actions .primary-button:disabled { background-color: $accent-alt; color: $bg-card; cursor: not-allowed; opacity: .7; }
 .download-status { margin: 0; color: $text-muted; font-size: 0.78rem; line-height: 1.4; }
 .download-status--error { color: $severity-high; }
 .button-spinner { display: inline-block; width: 0.85rem; height: 0.85rem; margin-right: 0.45rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -0.15em; animation: button-spin 0.7s linear infinite; }
@@ -420,7 +446,7 @@ $severity-low: #3fb950;
 .eyebrow, .overview-label { margin: 0 0 0.4rem; color: $accent; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .content-header { justify-content: space-between; align-items: flex-end; }
 .content-header h1 { margin: 0; color: $text-primary; font-size: clamp(1.4rem, 2vw, 2rem); }
-.content-header__status, .muted-badge { color: $text-muted; background: $bg-panel; border: 1px solid $border-color; border-radius: 999px; font-size: 0.7rem; padding: 0.25rem 0.55rem; }
+.muted-badge { color: $text-muted; background: $bg-panel; border: 1px solid $border-color; border-radius: 999px; font-size: 0.7rem; padding: 0.25rem 0.55rem; }
 .analysis-placeholder { display: grid; min-height: 22rem; place-items: center; align-content: center; gap: 0.75rem; padding: 2rem; text-align: center; background: $bg-panel; border: 1px dashed $border-color; border-radius: 0.7rem; }
 .analysis-placeholder__icon { color: $accent; font-size: 1.4rem; }
 .analysis-placeholder h2 { max-width: 34rem; margin: 0; color: $text-primary; font-size: 1rem; line-height: 1.6; }
@@ -530,7 +556,6 @@ $severity-low: #3fb950;
     .nav-heading__title { margin-top: 0.35rem; }
     .nav-actions { grid-template-columns: 1fr; }
     .content-header { display: block; }
-    .content-header__status { display: inline-block; margin-top: 0.75rem; }
 }
 
 .sidebar-divider {
