@@ -286,6 +286,68 @@ test("keeps Puppeteer launch failures distinct from Gemini request failures", as
     assert.equal(captured.closeCount, 0)
 })
 
+test("logs sanitized Puppeteer launch cause details and browser stderr", async () => {
+    const privateResumeHtml = "<html><body>Private generated resume</body></html>"
+    const launchError = Object.assign(new Error([
+        "Failed to launch the browser process",
+        "stderr:",
+        "error while loading shared libraries: libexample.so",
+        "Resume evidence",
+        `Authorization: Bearer private-token-123`,
+        "Cookie: session=private-cookie-456",
+        `HTML=${privateResumeHtml}`,
+        "AIza12345678901234567890",
+        "diagnostic ".repeat(80)
+    ].join("\n")), { code: "ERR_BROWSER_LAUNCH" })
+    captured.launchError = launchError
+    const originalError = console.error
+    const diagnostics = []
+    console.error = (...args) => diagnostics.push(args)
+
+    let thrown
+    try {
+        await assert.rejects(generate(), error => {
+            thrown = error
+            return error.stage === "puppeteer_launch" && error.cause === launchError
+        })
+    } finally {
+        console.error = originalError
+    }
+
+    const entry = diagnostics.find(([message]) => message === "Resume PDF generation failure")
+    assert.ok(entry)
+    assert.equal(entry[1].failureStage, "puppeteer_launch")
+    assert.equal(entry[1].errorName, "ResumeAnalysisServiceError")
+    assert.equal(entry[1].causeName, "Error")
+    assert.equal(entry[1].causeCode, "ERR_BROWSER_LAUNCH")
+    assert.ok(entry[1].causeMessage.length <= 500)
+    assert.match(entry[1].causeMessage, /libexample\.so/)
+    assert.ok(entry[1].browserStderr.length <= 500)
+    assert.match(entry[1].browserStderr, /libexample\.so/)
+    assert.equal(thrown.cause, launchError)
+    assert.doesNotMatch(`${entry[1].causeMessage} ${entry[1].browserStderr}`, /Resume evidence|private-token-123|private-cookie-456|Private generated resume|AIza12345678901234567890/)
+})
+
+test("handles missing optional Puppeteer launch error fields safely", async () => {
+    captured.launchError = {}
+    const originalError = console.error
+    const diagnostics = []
+    console.error = (...args) => diagnostics.push(args)
+
+    try {
+        await assert.rejects(generate(), error => error.stage === "puppeteer_launch")
+    } finally {
+        console.error = originalError
+    }
+
+    const entry = diagnostics.find(([message]) => message === "Resume PDF generation failure")
+    assert.ok(entry)
+    assert.equal(entry[1].errorName, "ResumeAnalysisServiceError")
+    assert.equal(entry[1].causeName, undefined)
+    assert.equal(entry[1].causeCode, undefined)
+    assert.equal(entry[1].causeMessage, undefined)
+})
+
 test("rejects oversized input before making a model request", async () => {
     await assert.rejects(generateResumePdf({ resume: "x".repeat(100_001), selfDescription: "", jobDescription: "" }), /size limit/i)
     assert.equal(captured.aiRequest, null)

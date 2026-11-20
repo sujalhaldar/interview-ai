@@ -99,7 +99,7 @@ function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function sanitizeProviderMessage(message, sensitiveValues = []) {
+function sanitizeProviderMessage(message, sensitiveValues = [], maxLength = 240) {
     let sanitized = typeof message === "string" ? message : ""
     for (const value of sensitiveValues) {
         if (typeof value === "string" && value.trim().length >= 4) {
@@ -108,13 +108,16 @@ function sanitizeProviderMessage(message, sensitiveValues = []) {
     }
     return sanitized
         .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[redacted]")
+        .replace(/\b(authorization|proxy-authorization|cookie|set-cookie)\s*[:=][^\r\n]*/gi, "$1=[redacted]")
+        .replace(/\b(access[_-]?token|refresh[_-]?token|id[_-]?token|token|api[_-]?key)\s*[:=]\s*[^&\s;,]+/gi, "$1=[redacted]")
+        .replace(/(?:<!doctype\s+html>\s*)?<html\b[\s\S]*?<\/html\s*>/gi, "[redacted-html]")
         .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
         .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
         .replace(/\+?\d[\d(). -]{7,}\d/g, "[redacted-number]")
         .replace(/[\r\n\t\0-\x1f\x7f]/g, " ")
         .replace(/\s+/g, " ")
         .trim()
-        .slice(0, 240)
+        .slice(0, maxLength)
 }
 
 function resumePdfProviderMetadata(error, sensitiveValues) {
@@ -140,13 +143,31 @@ function safeRequestId(requestId) {
     return typeof requestId === "string" && /^[a-zA-Z0-9._:-]{1,128}$/.test(requestId) ? requestId : undefined
 }
 
-function logResumePdfFailure(failureStage, error, { requestId, providerMetadata, zodIssues } = {}) {
+function resumePdfLaunchCauseMetadata(error, sensitiveValues) {
+    const metadata = {}
+    if (typeof error?.name === "string") metadata.causeName = sanitizeProviderMessage(error.name, sensitiveValues, 100)
+    if (typeof error?.code === "string" || Number.isInteger(error?.code)) {
+        metadata.causeCode = sanitizeProviderMessage(String(error.code), sensitiveValues, 100)
+    }
+    if (typeof error?.message === "string") {
+        metadata.causeMessage = sanitizeProviderMessage(error.message, sensitiveValues, 500)
+        const stderr = error.message.match(/\bstderr:\s*([\s\S]*?)(?:\nTROUBLESHOOTING:|$)/i)?.[1]?.trim()
+        if (stderr) metadata.browserStderr = sanitizeProviderMessage(stderr, sensitiveValues, 500)
+    }
+    return metadata
+}
+
+function logResumePdfFailure(failureStage, error, { requestId, providerMetadata, causeMetadata, zodIssues } = {}) {
     const requestIdValue = safeRequestId(requestId)
     console.error("Resume PDF generation failure", {
         workflow: "resume_pdf",
         failureStage,
         ...(requestIdValue ? { requestId: requestIdValue } : {}),
         errorName: error?.name || "Error",
+        ...(causeMetadata?.causeName ? { causeName: causeMetadata.causeName } : {}),
+        ...(causeMetadata?.causeCode ? { causeCode: causeMetadata.causeCode } : {}),
+        ...(causeMetadata?.causeMessage ? { causeMessage: causeMetadata.causeMessage } : {}),
+        ...(causeMetadata?.browserStderr ? { browserStderr: causeMetadata.browserStderr } : {}),
         ...(Number.isInteger(providerMetadata?.httpStatus) ? { httpStatus: providerMetadata.httpStatus } : {}),
         ...(providerMetadata?.providerCode ? { providerCode: providerMetadata.providerCode } : {}),
         ...(providerMetadata?.providerReason ? { providerReason: providerMetadata.providerReason } : {}),
@@ -470,13 +491,14 @@ function renderResumeHtml(resume) {
     </style></head><body><main><header><h1>${escapeHtml(resume.fullName)}</h1><div class="contact">${contactDetails}</div></header>${summary}${sections}</main></body></html>`
 }
 
-async function generatePdfFromHtml(htmlContent, { requestId } = {}) {
+async function generatePdfFromHtml(htmlContent, { requestId, sensitiveValues = [] } = {}) {
     let browser
     try {
         browser = await puppeteer.launch({ timeout: PDF_BROWSER_TIMEOUT_MS })
     } catch (error) {
         const failure = new ResumeAnalysisServiceError("Resume PDF browser launch failed", { stage: "puppeteer_launch", cause: error })
-        logResumePdfFailure(failure.stage, failure, { requestId })
+        const causeMetadata = resumePdfLaunchCauseMetadata(error, sensitiveValues)
+        logResumePdfFailure(failure.stage, failure, { requestId, causeMetadata })
         throw failure
     }
 
@@ -597,7 +619,7 @@ async function generateResumePdf({ resume, selfDescription, jobDescription, anal
         throw failure
     }
 
-    return generatePdfFromHtml(html, { requestId })
+    return generatePdfFromHtml(html, { requestId, sensitiveValues: [...sensitiveValues, html] })
 }
 
 module.exports = {
