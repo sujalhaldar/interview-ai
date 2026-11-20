@@ -30,12 +30,14 @@ const CATEGORY_WEIGHTS = Object.freeze({
 const LEGACY_RESPONSE_FIELDS = [ "technicalQuestions", "behavioralQuestions", "skillGaps" ]
 
 class ResumeAnalysisServiceError extends Error {
-    constructor(message, { stage, cause, upstreamStatus, providerCode, zodIssues } = {}) {
+    constructor(message, { stage, cause, upstreamStatus, providerCode, providerReason, providerMessage, zodIssues } = {}) {
         super(message, { cause })
         this.name = "ResumeAnalysisServiceError"
         this.stage = stage
         this.upstreamStatus = upstreamStatus
         this.providerCode = providerCode
+        this.providerReason = providerReason
+        this.providerMessage = providerMessage
         this.zodIssues = zodIssues
     }
 }
@@ -56,8 +58,9 @@ function providerMetadata(error) {
     return { upstreamStatus: status, providerCode }
 }
 
-function geminiResponseSchema(schema) {
+function geminiResponseSchema(schema, { omitMaxItems = false } = {}) {
     const unsupported = new Set([ "$schema", "additionalProperties", "minLength", "maxLength", "minimum", "maximum" ])
+    if (omitMaxItems) unsupported.add("maxItems")
 
     function clean(value) {
         if (Array.isArray(value)) return value.map(clean)
@@ -76,6 +79,80 @@ function geminiResponseSchema(schema) {
     }
 
     return clean(schema)
+}
+
+function extractProviderError(error) {
+    const directError = error?.response?.data?.error || error?.error
+    if (directError && typeof directError === "object") return directError
+
+    if (typeof error?.message !== "string") return undefined
+    const jsonStart = error.message.indexOf("{")
+    if (jsonStart < 0) return undefined
+    try {
+        return JSON.parse(error.message.slice(jsonStart))?.error
+    } catch {
+        return undefined
+    }
+}
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function sanitizeProviderMessage(message, sensitiveValues = []) {
+    let sanitized = typeof message === "string" ? message : ""
+    for (const value of sensitiveValues) {
+        if (typeof value === "string" && value.trim().length >= 4) {
+            sanitized = sanitized.replace(new RegExp(escapeRegExp(value.trim()), "gi"), "[redacted]")
+        }
+    }
+    return sanitized
+        .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[redacted]")
+        .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+        .replace(/\+?\d[\d(). -]{7,}\d/g, "[redacted-number]")
+        .replace(/[\r\n\t\0-\x1f\x7f]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 240)
+}
+
+function resumePdfProviderMetadata(error, sensitiveValues) {
+    const providerError = extractProviderError(error)
+    const httpStatus = [ error?.status, error?.statusCode, error?.response?.status, providerError?.code ]
+        .find(value => Number.isInteger(value))
+    const providerCode = [ providerError?.status, providerError?.code, error?.code ]
+        .find(value => (typeof value === "string" || Number.isInteger(value)) && String(value).length <= 80)
+    const providerReason = Array.isArray(providerError?.details)
+        ? providerError.details.find(detail => typeof detail?.reason === "string")?.reason
+        : undefined
+    const rawMessage = typeof providerError?.message === "string" ? providerError.message : error?.message
+
+    return {
+        httpStatus,
+        providerCode: providerCode === undefined ? undefined : sanitizeProviderMessage(String(providerCode), sensitiveValues).slice(0, 80),
+        providerReason: typeof providerReason === "string" ? sanitizeProviderMessage(providerReason, sensitiveValues).slice(0, 80) : undefined,
+        providerMessage: sanitizeProviderMessage(rawMessage, sensitiveValues)
+    }
+}
+
+function safeRequestId(requestId) {
+    return typeof requestId === "string" && /^[a-zA-Z0-9._:-]{1,128}$/.test(requestId) ? requestId : undefined
+}
+
+function logResumePdfFailure(failureStage, error, { requestId, providerMetadata, zodIssues } = {}) {
+    const requestIdValue = safeRequestId(requestId)
+    console.error("Resume PDF generation failure", {
+        workflow: "resume_pdf",
+        failureStage,
+        ...(requestIdValue ? { requestId: requestIdValue } : {}),
+        errorName: error?.name || "Error",
+        ...(Number.isInteger(providerMetadata?.httpStatus) ? { httpStatus: providerMetadata.httpStatus } : {}),
+        ...(providerMetadata?.providerCode ? { providerCode: providerMetadata.providerCode } : {}),
+        ...(providerMetadata?.providerReason ? { providerReason: providerMetadata.providerReason } : {}),
+        ...(providerMetadata?.providerMessage ? { providerMessage: providerMetadata.providerMessage } : {}),
+        ...(Array.isArray(zodIssues) ? { zodIssues } : {})
+    })
 }
 
 function analysisResponseSchemaForGemini() {
@@ -393,8 +470,17 @@ function renderResumeHtml(resume) {
     </style></head><body><main><header><h1>${escapeHtml(resume.fullName)}</h1><div class="contact">${contactDetails}</div></header>${summary}${sections}</main></body></html>`
 }
 
-async function generatePdfFromHtml(htmlContent) {
-    const browser = await puppeteer.launch({ timeout: PDF_BROWSER_TIMEOUT_MS })
+async function generatePdfFromHtml(htmlContent, { requestId } = {}) {
+    let browser
+    try {
+        browser = await puppeteer.launch({ timeout: PDF_BROWSER_TIMEOUT_MS })
+    } catch (error) {
+        const failure = new ResumeAnalysisServiceError("Resume PDF browser launch failed", { stage: "puppeteer_launch", cause: error })
+        logResumePdfFailure(failure.stage, failure, { requestId })
+        throw failure
+    }
+
+    let renderFailure
     try {
         const page = await browser.newPage()
         await page.setJavaScriptEnabled(false)
@@ -407,15 +493,28 @@ async function generatePdfFromHtml(htmlContent) {
             timeout: PDF_BROWSER_TIMEOUT_MS,
             margin: { top: "20mm", bottom: "20mm", left: "15mm", right: "15mm" }
         })
+    } catch (error) {
+        renderFailure = new ResumeAnalysisServiceError("Resume PDF rendering failed", { stage: "pdf_rendering", cause: error })
+        logResumePdfFailure(renderFailure.stage, renderFailure, { requestId })
+        throw renderFailure
     } finally {
-        await browser.close()
+        try {
+            await browser.close()
+        } catch (error) {
+            if (!renderFailure) {
+                const failure = new ResumeAnalysisServiceError("Resume PDF browser cleanup failed", { stage: "puppeteer_cleanup", cause: error })
+                logResumePdfFailure(failure.stage, failure, { requestId })
+                throw failure
+            }
+        }
     }
 }
 
-async function generateResumePdf({ resume, selfDescription, jobDescription, analysisContext = null }) {
+async function generateResumePdf({ resume, selfDescription, jobDescription, analysisContext = null, requestId }) {
     const context = analysisContext && typeof analysisContext === "object" ? JSON.stringify(analysisContext) : "No persisted V2 analysis context is available."
     const inputTextLength = [resume, selfDescription, jobDescription, context].reduce((total, value) => total + (typeof value === "string" ? value.length : 0), 0)
     if (inputTextLength > MAX_RESUME_PDF_INPUT_CHARS) throw new Error("Resume PDF input exceeds the size limit")
+    const sensitiveValues = [resume, selfDescription, jobDescription, context]
     const prompt = `Generate resume for a candidate with the following details:
                         Resume: ${resume}
                         Self Description: ${selfDescription}
@@ -437,34 +536,68 @@ async function generateResumePdf({ resume, selfDescription, jobDescription, anal
                         - Do not create projects, employers, credentials, achievements, metrics, or unsupported technology claims.
                         - Preserve the original resume's factual content, section hierarchy, and meaning while improving clarity and tailoring emphasis to the job description.`
 
-    const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: geminiResponseSchema(zodToJsonSchema(resumePdfSchema, { $refStrategy: "none" }))
+    let response
+    try {
+        response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: geminiResponseSchema(zodToJsonSchema(resumePdfSchema, { $refStrategy: "none" }), { omitMaxItems: true })
+            }
+        })
+    } catch (error) {
+        const metadata = resumePdfProviderMetadata(error, sensitiveValues)
+        const failure = new ResumeAnalysisServiceError("Resume PDF Gemini request failed", {
+            stage: "gemini_request",
+            cause: error,
+            upstreamStatus: metadata.httpStatus,
+            providerCode: metadata.providerCode,
+            providerReason: metadata.providerReason,
+            providerMessage: metadata.providerMessage
+        })
+        if (Number.isInteger(metadata.httpStatus) && metadata.httpStatus >= 400 && metadata.httpStatus <= 599) {
+            failure.status = metadata.httpStatus
         }
-    })
+        logResumePdfFailure(failure.stage, failure, { requestId, providerMetadata: metadata })
+        throw failure
+    }
 
     if (typeof response?.text !== "string" || response.text.length > MAX_RESUME_PDF_RESPONSE_CHARS) {
-        throw new Error("Resume PDF model response is missing or exceeds the size limit")
+        const failure = new ResumeAnalysisServiceError("Resume PDF model response is missing or exceeds the size limit", { stage: "response_validation" })
+        logResumePdfFailure(failure.stage, failure, { requestId })
+        throw failure
     }
 
     let parsed
     try {
         parsed = JSON.parse(response.text)
     } catch (error) {
-        throw new ResumeAnalysisServiceError("Resume PDF model response was not valid JSON", { stage: "json_parsing", cause: error })
+        const failure = new ResumeAnalysisServiceError("Resume PDF model response was not valid JSON", { stage: "json_parsing", cause: error })
+        logResumePdfFailure(failure.stage, failure, { requestId })
+        throw failure
     }
     const validated = resumePdfSchema.safeParse(parsed)
     if (!validated.success) {
-        throw new ResumeAnalysisServiceError("Resume PDF model response failed schema validation", {
+        const zodIssues = validated.error.issues.map(issue => ({ path: issue.path.join("."), code: issue.code }))
+        const failure = new ResumeAnalysisServiceError("Resume PDF model response failed schema validation", {
             stage: "schema_validation",
-            zodIssues: validated.error.issues.map(issue => ({ path: issue.path.join("."), code: issue.code }))
+            zodIssues
         })
+        logResumePdfFailure(failure.stage, failure, { requestId, zodIssues })
+        throw failure
     }
 
-    return generatePdfFromHtml(renderResumeHtml(validated.data))
+    let html
+    try {
+        html = renderResumeHtml(validated.data)
+    } catch (error) {
+        const failure = new ResumeAnalysisServiceError("Resume PDF HTML generation failed", { stage: "html_rendering", cause: error })
+        logResumePdfFailure(failure.stage, failure, { requestId })
+        throw failure
+    }
+
+    return generatePdfFromHtml(html, { requestId })
 }
 
 module.exports = {

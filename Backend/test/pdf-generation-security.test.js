@@ -11,6 +11,9 @@ const captured = {
     pageCalls: [],
     listeners: {},
     closeCount: 0,
+    aiError: null,
+    responseText: null,
+    launchError: null,
     pdfError: null,
     setContentError: null
 }
@@ -27,7 +30,8 @@ class FakeGoogleGenAI {
         this.models = {
             generateContent: async request => {
                 captured.aiRequest = request
-                return { text: JSON.stringify(modelData) }
+                if (captured.aiError) throw captured.aiError
+                return { text: captured.responseText ?? JSON.stringify(modelData) }
             }
         }
     }
@@ -58,6 +62,7 @@ const fakePage = {
 const fakePuppeteer = {
     async launch(options) {
         captured.launchOptions = options
+        if (captured.launchError) throw captured.launchError
         return {
             async newPage() { return fakePage },
             async close() { captured.closeCount += 1 }
@@ -82,6 +87,9 @@ beforeEach(() => {
     captured.pageCalls = []
     captured.listeners = {}
     captured.closeCount = 0
+    captured.aiError = null
+    captured.responseText = null
+    captured.launchError = null
     captured.pdfError = null
     captured.setContentError = null
     modelData = {
@@ -107,6 +115,88 @@ test("requests structured resume data and rejects the old raw-HTML response shap
     assert.ok(captured.aiRequest.config.responseSchema.properties.fullName)
     assert.equal(captured.aiRequest.config.responseSchema.properties.html, undefined)
     assert.equal(setContentCall(), undefined)
+})
+
+test("omits maxItems only from the PDF provider schema while preserving its structure", async () => {
+    await generate()
+
+    const providerSchema = captured.aiRequest.config.responseSchema
+    const keywords = []
+    const visit = value => {
+        if (!value || typeof value !== "object") return
+        for (const [key, child] of Object.entries(value)) {
+            keywords.push(key)
+            visit(child)
+        }
+    }
+    visit(providerSchema)
+
+    assert.equal(keywords.includes("maxItems"), false)
+    assert.equal(providerSchema.type, "object")
+    assert.deepEqual(providerSchema.required, ["fullName", "contactDetails", "sections"])
+    assert.equal(providerSchema.properties.sections.type, "array")
+    assert.equal(providerSchema.properties.sections.items.properties.entries.items.properties.title.type, "string")
+})
+
+test("retains the original Zod array limits after provider constraints are omitted", async () => {
+    modelData.contactDetails = Array.from({ length: 7 }, (_, index) => `contact-${index}`)
+
+    await assert.rejects(generate(), error => error.stage === "schema_validation")
+    assert.equal(captured.closeCount, 0)
+})
+
+test("wraps malformed Gemini JSON with the JSON parsing stage", async () => {
+    captured.responseText = "{not json"
+
+    await assert.rejects(generate(), error => error.stage === "json_parsing")
+    assert.equal(captured.closeCount, 0)
+})
+
+test("returns a PDF after a valid Gemini response", async () => {
+    const result = await generate()
+
+    assert.deepEqual(result, Buffer.from("%PDF-test"))
+    assert.equal(captured.closeCount, 1)
+})
+
+test("logs safe Gemini provider metadata without prompt data", async () => {
+    const privateResume = "Private resume contents"
+    const syntheticKey = "AIza12345678901234567890"
+    const providerBody = {
+        error: {
+            code: 400,
+            message: `Invalid response schema for ${privateResume}; ${syntheticKey}; Bearer test-token; sample@example.test; +1 415 555 0132; ${"x".repeat(300)}`,
+            status: "INVALID_ARGUMENT",
+            details: [{ reason: `SCHEMA_INVALID ${privateResume}` }]
+        }
+    }
+    captured.aiError = Object.assign(
+        new Error(`got status: INVALID_ARGUMENT. ${JSON.stringify(providerBody)}`),
+        { status: 400 }
+    )
+    const originalError = console.error
+    const diagnostics = []
+    console.error = (...args) => diagnostics.push(args)
+
+    try {
+        await assert.rejects(
+            generateResumePdf({ resume: privateResume, selfDescription: "Private profile", jobDescription: "Private role", requestId: "request-123" }),
+            error => error.stage === "gemini_request" && error.upstreamStatus === 400 && error.status === 400
+        )
+    } finally {
+        console.error = originalError
+    }
+
+    const entry = diagnostics.find(([message]) => message === "Resume PDF generation failure")
+    assert.ok(entry)
+    assert.equal(entry[1].workflow, "resume_pdf")
+    assert.equal(entry[1].failureStage, "gemini_request")
+    assert.equal(entry[1].requestId, "request-123")
+    assert.equal(entry[1].httpStatus, 400)
+    assert.equal(entry[1].providerCode, "INVALID_ARGUMENT")
+    assert.equal(entry[1].providerReason, "SCHEMA_INVALID [redacted]")
+    assert.ok(entry[1].providerMessage.length <= 240)
+    assert.doesNotMatch(entry[1].providerMessage, /Private resume contents|Private profile|Private role|AIza12345678901234567890|test-token|sample@example.test|415 555 0132/)
 })
 
 test("renders model output as structured text, not executable or attacker-controlled markup", async () => {
@@ -178,15 +268,22 @@ test("blocks browser network requests while generating the PDF", async () => {
 test("closes the browser when page setup fails", async () => {
     captured.setContentError = new Error("page setup failed")
 
-    await assert.rejects(generate(), /page setup failed/)
+    await assert.rejects(generate(), error => error.stage === "pdf_rendering")
     assert.equal(captured.closeCount, 1)
 })
 
 test("closes the browser when PDF rendering fails", async () => {
     captured.pdfError = new Error("pdf rendering failed")
 
-    await assert.rejects(generate(), /pdf rendering failed/)
+    await assert.rejects(generate(), error => error.stage === "pdf_rendering")
     assert.equal(captured.closeCount, 1)
+})
+
+test("keeps Puppeteer launch failures distinct from Gemini request failures", async () => {
+    captured.launchError = new Error("browser launch failed")
+
+    await assert.rejects(generate(), error => error.stage === "puppeteer_launch")
+    assert.equal(captured.closeCount, 0)
 })
 
 test("rejects oversized input before making a model request", async () => {

@@ -258,7 +258,13 @@ async function generateResumePdfController(req, res) {
         educationCertificationAnalysis: interviewReport.educationCertificationAnalysis || null
     }
 
-    const pdfBuffer = await generateResumePdf({ resume, jobDescription, selfDescription, analysisContext })
+    const pdfBuffer = await generateResumePdf({
+        resume,
+        jobDescription,
+        selfDescription,
+        analysisContext,
+        requestId: req.id || req.get?.("x-request-id")
+    })
 
     res.set({
         "Content-Type": "application/pdf",

@@ -85,11 +85,12 @@ after(() => {
 })
 
 test("authenticated owner receives their report PDF", async () => {
-    const response = await authenticatedRequest(OWNER_ID, OWNER_REPORT_ID)
+    const response = await authenticatedRequest(OWNER_ID, OWNER_REPORT_ID).set("X-Request-Id", "request-123")
 
     assert.equal(response.status, 200)
     assert.equal(response.headers["content-type"], "application/pdf")
     assert.equal(response.body.toString(), "%PDF-test-content")
+    assert.equal(capturedResumeGenerationArgs.requestId, "request-123")
 })
 
 test("authenticated owner generation uses the latest persisted V2 context", async () => {
