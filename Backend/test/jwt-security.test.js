@@ -42,13 +42,13 @@ test("session cookie options are explicit and localhost-compatible", () => {
     else process.env.NODE_ENV = originalNodeEnv
 })
 
-test("production session cookie options require HTTPS", () => {
+test("production session cookie options support cross-site HTTPS sessions", () => {
     const originalNodeEnv = process.env.NODE_ENV
     process.env.NODE_ENV = "production"
     const options = authConfig.getSessionCookieOptions()
     assert.equal(options.httpOnly, true)
     assert.equal(options.secure, true)
-    assert.equal(options.sameSite, "lax")
+    assert.equal(options.sameSite, "none")
     assert.equal(options.path, "/")
     assert.equal(options.maxAge, authConfig.JWT_MAX_AGE_MS)
     if (originalNodeEnv === undefined) delete process.env.NODE_ENV

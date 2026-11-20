@@ -46,7 +46,7 @@ test("production session cookie has explicit security and lifetime attributes", 
     const cookie = response.headers["set-cookie"].find(value => value.startsWith("token="))
     assert.match(cookie, /HttpOnly/)
     assert.match(cookie, /Secure/)
-    assert.match(cookie, /SameSite=Lax/)
+    assert.match(cookie, /SameSite=None/)
     assert.match(cookie, /Path=\//)
     assert.match(cookie, /Max-Age=86400/)
     if (originalNodeEnv === undefined) delete process.env.NODE_ENV
@@ -97,7 +97,7 @@ test("logout continues to revoke the application session", async () => {
     const clearedCookie = logout.headers["set-cookie"].find(value => value.startsWith("token="))
     assert.match(clearedCookie, /HttpOnly/)
     assert.match(clearedCookie, /Secure/)
-    assert.match(clearedCookie, /SameSite=Lax/)
+    assert.match(clearedCookie, /SameSite=None/)
     assert.match(clearedCookie, /Path=\//)
     assert.match(clearedCookie, /Expires=Thu, 01 Jan 1970 00:00:00 GMT/)
 
