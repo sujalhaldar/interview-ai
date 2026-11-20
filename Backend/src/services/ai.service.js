@@ -2,6 +2,7 @@ const { GoogleGenAI } = require("@google/genai")
 const { z } = require("zod")
 const { zodToJsonSchema } = require("zod-to-json-schema")
 const puppeteer = require("puppeteer")
+const { generateResumePdfContent, extractProviderError } = require("./resume-pdf-gemini.service")
 
 const ai = new GoogleGenAI({
     apiKey: process.env.GOOGLE_GENAI_API_KEY
@@ -81,20 +82,6 @@ function geminiResponseSchema(schema, { omitMaxItems = false } = {}) {
     return clean(schema)
 }
 
-function extractProviderError(error) {
-    const directError = error?.response?.data?.error || error?.error
-    if (directError && typeof directError === "object") return directError
-
-    if (typeof error?.message !== "string") return undefined
-    const jsonStart = error.message.indexOf("{")
-    if (jsonStart < 0) return undefined
-    try {
-        return JSON.parse(error.message.slice(jsonStart))?.error
-    } catch {
-        return undefined
-    }
-}
-
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -157,13 +144,14 @@ function resumePdfLaunchCauseMetadata(error, sensitiveValues) {
     return metadata
 }
 
-function logResumePdfFailure(failureStage, error, { requestId, providerMetadata, causeMetadata, zodIssues } = {}) {
+function logResumePdfFailure(failureStage, error, { requestId, providerMetadata, causeMetadata, zodIssues, attemptCount } = {}) {
     const requestIdValue = safeRequestId(requestId)
     console.error("Resume PDF generation failure", {
         workflow: "resume_pdf",
         failureStage,
         ...(requestIdValue ? { requestId: requestIdValue } : {}),
         errorName: error?.name || "Error",
+        ...(Number.isInteger(attemptCount) ? { attemptCount } : {}),
         ...(causeMetadata?.causeName ? { causeName: causeMetadata.causeName } : {}),
         ...(causeMetadata?.causeCode ? { causeCode: causeMetadata.causeCode } : {}),
         ...(causeMetadata?.causeMessage ? { causeMessage: causeMetadata.causeMessage } : {}),
@@ -491,48 +479,83 @@ function renderResumeHtml(resume) {
     </style></head><body><main><header><h1>${escapeHtml(resume.fullName)}</h1><div class="contact">${contactDetails}</div></header>${summary}${sections}</main></body></html>`
 }
 
-async function generatePdfFromHtml(htmlContent, { requestId, sensitiveValues = [] } = {}) {
+async function generatePdfFromHtml(htmlContent, { requestId, sensitiveValues = [], signal } = {}) {
     let browser
-    try {
-        browser = await puppeteer.launch({ timeout: PDF_BROWSER_TIMEOUT_MS })
-    } catch (error) {
-        const failure = new ResumeAnalysisServiceError("Resume PDF browser launch failed", { stage: "puppeteer_launch", cause: error })
-        const causeMetadata = resumePdfLaunchCauseMetadata(error, sensitiveValues)
-        logResumePdfFailure(failure.stage, failure, { requestId, causeMetadata })
-        throw failure
+    let closePromise
+    const closeBrowser = () => {
+        if (!browser) return Promise.resolve()
+        closePromise ??= Promise.resolve().then(() => browser.close())
+        return closePromise
     }
-
-    let renderFailure
+    let rejectCancellation
+    const cancellation = new Promise((resolve, reject) => { rejectCancellation = reject })
+    const onAbort = () => {
+        rejectCancellation(signal.reason)
+        closeBrowser().catch(() => {})
+    }
+    signal?.addEventListener("abort", onAbort, { once: true })
+    const run = async operation => {
+        signal?.throwIfAborted()
+        const result = await Promise.race([
+            Promise.resolve().then(() => {
+                signal?.throwIfAborted()
+                return operation()
+            }),
+            cancellation
+        ])
+        signal?.throwIfAborted()
+        return result
+    }
     try {
-        const page = await browser.newPage()
-        await page.setJavaScriptEnabled(false)
-        await page.setRequestInterception(true)
-        page.on("request", request => request.abort().catch(() => {}))
-        await page.setContent(htmlContent, { waitUntil: "domcontentloaded", timeout: PDF_CONTENT_TIMEOUT_MS })
-
-        return await page.pdf({
-            format: "A4",
-            timeout: PDF_BROWSER_TIMEOUT_MS,
-            margin: { top: "20mm", bottom: "20mm", left: "15mm", right: "15mm" }
-        })
-    } catch (error) {
-        renderFailure = new ResumeAnalysisServiceError("Resume PDF rendering failed", { stage: "pdf_rendering", cause: error })
-        logResumePdfFailure(renderFailure.stage, renderFailure, { requestId })
-        throw renderFailure
-    } finally {
         try {
-            await browser.close()
+            await run(async () => {
+                browser = await puppeteer.launch({ timeout: PDF_BROWSER_TIMEOUT_MS })
+                // Launch itself cannot be cancelled; dispose of a browser that arrives after the caller leaves.
+                if (signal?.aborted) await closeBrowser()
+                signal?.throwIfAborted()
+            })
         } catch (error) {
-            if (!renderFailure) {
-                const failure = new ResumeAnalysisServiceError("Resume PDF browser cleanup failed", { stage: "puppeteer_cleanup", cause: error })
-                logResumePdfFailure(failure.stage, failure, { requestId })
-                throw failure
+            const failure = new ResumeAnalysisServiceError("Resume PDF browser launch failed", { stage: "puppeteer_launch", cause: error })
+            const causeMetadata = resumePdfLaunchCauseMetadata(error, sensitiveValues)
+            logResumePdfFailure(failure.stage, failure, { requestId, causeMetadata })
+            throw failure
+        }
+
+        let renderFailure
+        try {
+            const page = await run(() => browser.newPage())
+            await run(() => page.setJavaScriptEnabled(false))
+            await run(() => page.setRequestInterception(true))
+            page.on("request", request => request.abort().catch(() => {}))
+            await run(() => page.setContent(htmlContent, { waitUntil: "domcontentloaded", timeout: PDF_CONTENT_TIMEOUT_MS }))
+
+            return await run(() => page.pdf({
+                format: "A4",
+                timeout: PDF_BROWSER_TIMEOUT_MS,
+                margin: { top: "20mm", bottom: "20mm", left: "15mm", right: "15mm" }
+            }))
+        } catch (error) {
+            renderFailure = new ResumeAnalysisServiceError("Resume PDF rendering failed", { stage: "pdf_rendering", cause: error })
+            logResumePdfFailure(renderFailure.stage, renderFailure, { requestId })
+            throw renderFailure
+        } finally {
+            try {
+                await run(closeBrowser)
+                signal?.throwIfAborted()
+            } catch (error) {
+                if (!renderFailure) {
+                    const failure = new ResumeAnalysisServiceError("Resume PDF browser cleanup failed", { stage: "puppeteer_cleanup", cause: error })
+                    logResumePdfFailure(failure.stage, failure, { requestId })
+                    throw failure
+                }
             }
         }
+    } finally {
+        signal?.removeEventListener("abort", onAbort)
     }
 }
 
-async function generateResumePdf({ resume, selfDescription, jobDescription, analysisContext = null, requestId }) {
+async function generateResumePdf({ resume, selfDescription, jobDescription, analysisContext = null, requestId, signal, geminiTimeoutMs }) {
     const context = analysisContext && typeof analysisContext === "object" ? JSON.stringify(analysisContext) : "No persisted V2 analysis context is available."
     const inputTextLength = [resume, selfDescription, jobDescription, context].reduce((total, value) => total + (typeof value === "string" ? value.length : 0), 0)
     if (inputTextLength > MAX_RESUME_PDF_INPUT_CHARS) throw new Error("Resume PDF input exceeds the size limit")
@@ -558,17 +581,19 @@ async function generateResumePdf({ resume, selfDescription, jobDescription, anal
                         - Do not create projects, employers, credentials, achievements, metrics, or unsupported technology claims.
                         - Preserve the original resume's factual content, section hierarchy, and meaning while improving clarity and tailoring emphasis to the job description.`
 
+    const request = {
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: geminiResponseSchema(zodToJsonSchema(resumePdfSchema, { $refStrategy: "none" }), { omitMaxItems: true })
+        }
+    }
     let response
     try {
-        response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: geminiResponseSchema(zodToJsonSchema(resumePdfSchema, { $refStrategy: "none" }), { omitMaxItems: true })
-            }
-        })
+        response = await generateResumePdfContent(ai, request, { signal, timeoutMs: geminiTimeoutMs })
     } catch (error) {
+        const attemptCount = error?.attemptCount ?? 0
         const metadata = resumePdfProviderMetadata(error, sensitiveValues)
         const failure = new ResumeAnalysisServiceError("Resume PDF Gemini request failed", {
             stage: "gemini_request",
@@ -581,7 +606,8 @@ async function generateResumePdf({ resume, selfDescription, jobDescription, anal
         if (Number.isInteger(metadata.httpStatus) && metadata.httpStatus >= 400 && metadata.httpStatus <= 599) {
             failure.status = metadata.httpStatus
         }
-        logResumePdfFailure(failure.stage, failure, { requestId, providerMetadata: metadata })
+        failure.attemptCount = attemptCount
+        logResumePdfFailure(failure.stage, failure, { requestId, providerMetadata: metadata, attemptCount })
         throw failure
     }
 
@@ -619,7 +645,7 @@ async function generateResumePdf({ resume, selfDescription, jobDescription, anal
         throw failure
     }
 
-    return generatePdfFromHtml(html, { requestId, sensitiveValues: [...sensitiveValues, html] })
+    return generatePdfFromHtml(html, { requestId, sensitiveValues: [...sensitiveValues, html], signal })
 }
 
 module.exports = {

@@ -228,50 +228,66 @@ async function deleteInterviewReportController(req, res) {
  */
 async function generateResumePdfController(req, res) {
     const { interviewReportId } = req.params
+    const cancellation = new AbortController()
+    const cancel = () => cancellation.abort()
+    const onClose = () => { if (!res.writableEnded) cancel() }
+    req.once("aborted", cancel)
+    res.once("close", onClose)
 
-    const interviewReport = await interviewReportModel.findOne({
-        _id: interviewReportId,
-        user: req.user.id
-    })
-
-    if (!interviewReport) {
-        return res.status(404).json({
-            message: "Interview report not found."
+    try {
+        if (req.aborted || res.destroyed) return
+        const interviewReport = await interviewReportModel.findOne({
+            _id: interviewReportId,
+            user: req.user.id
         })
+        if (cancellation.signal.aborted) return
+
+        if (!interviewReport) {
+            return res.status(404).json({
+                message: "Interview report not found."
+            })
+        }
+
+        const { resume, jobDescription, selfDescription } = interviewReport
+        const analysisContext = {
+            analysisVersion: interviewReport.analysisVersion || null,
+            confirmedSkills: (interviewReport.confirmedSkills || []).map(skill => ({
+                normalizedName: skill.normalizedName,
+                originalText: skill.originalText,
+                sourceType: skill.sourceType,
+                confidence: skill.confidence
+            })),
+            requirementAnalysis: interviewReport.requirementAnalysis || null,
+            strengths: interviewReport.strengths || [],
+            areasOfImprovement: interviewReport.areasOfImprovement || [],
+            resumeGaps: interviewReport.resumeGaps || [],
+            skillGaps: interviewReport.skillGaps || [],
+            experienceAlignment: interviewReport.experienceAlignment || null,
+            educationCertificationAnalysis: interviewReport.educationCertificationAnalysis || null
+        }
+
+        const pdfBuffer = await generateResumePdf({
+            resume,
+            jobDescription,
+            selfDescription,
+            analysisContext,
+            requestId: req.id || req.get?.("x-request-id"),
+            signal: cancellation.signal
+        })
+        if (cancellation.signal.aborted) return
+
+        res.set({
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename=resume_${interviewReportId}.pdf`
+        })
+
+        res.send(pdfBuffer)
+    } catch (error) {
+        if (!cancellation.signal.aborted) throw error
+    } finally {
+        req.off("aborted", cancel)
+        res.off("close", onClose)
     }
-
-    const { resume, jobDescription, selfDescription } = interviewReport
-    const analysisContext = {
-        analysisVersion: interviewReport.analysisVersion || null,
-        confirmedSkills: (interviewReport.confirmedSkills || []).map(skill => ({
-            normalizedName: skill.normalizedName,
-            originalText: skill.originalText,
-            sourceType: skill.sourceType,
-            confidence: skill.confidence
-        })),
-        requirementAnalysis: interviewReport.requirementAnalysis || null,
-        strengths: interviewReport.strengths || [],
-        areasOfImprovement: interviewReport.areasOfImprovement || [],
-        resumeGaps: interviewReport.resumeGaps || [],
-        skillGaps: interviewReport.skillGaps || [],
-        experienceAlignment: interviewReport.experienceAlignment || null,
-        educationCertificationAnalysis: interviewReport.educationCertificationAnalysis || null
-    }
-
-    const pdfBuffer = await generateResumePdf({
-        resume,
-        jobDescription,
-        selfDescription,
-        analysisContext,
-        requestId: req.id || req.get?.("x-request-id")
-    })
-
-    res.set({
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename=resume_${interviewReportId}.pdf`
-    })
-
-    res.send(pdfBuffer)
 }
 
 function normalizeConfirmedSkills(values) {
